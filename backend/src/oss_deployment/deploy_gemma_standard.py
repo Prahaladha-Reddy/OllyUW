@@ -40,8 +40,8 @@ vllm_image = (
 @app.function(
     image=vllm_image,
     gpu="L40S",
-    scaledown_window=5 * MINUTES,    
-    timeout=10 * MINUTES,
+    scaledown_window=20 * MINUTES,
+    timeout=30 * MINUTES,
     volumes={
         "/root/.cache/huggingface": hf_cache_vol,
         "/root/.cache/vllm": vllm_cache_vol,
