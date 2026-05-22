@@ -1049,72 +1049,125 @@ All LangGraph nodes, tool bindings, and structured-output calls use whichever `l
 
 ### 13.2 Modal OSS Deployment — LLM Endpoint Only
 
-Modal hosts only the vLLM inference server. No volumes, no orchestration, no agent state — just a GPU endpoint that responds to standard OpenAI-compatible requests. This keeps Modal costs minimal: billed only for active GPU-seconds during generation, not for idle time or storage.
+Modal hosts only the vLLM inference server. No volumes for agent state, no orchestration — just a GPU endpoint that responds to standard OpenAI-compatible requests. We ship **two parallel deployments** of the same model:
+
+- `deploy_gemma4_standard.py` → FP8 KV cache, `max_model_len=65536`
+- `deploy_gemma4_turboquant.py` → TurboQuant K8V4 KV cache, `max_model_len=131072`
+
+Both apps share the same HF + vLLM cache volumes, so the second one to cold-start reuses the first one's weights and compiled CUDA graphs. The comparison answer ("does TurboQuant actually help on Gemma 4?") falls out of running the same eval against both URLs.
+
+**Canonical pattern (mirrors the official Modal vLLM Gemma 4 recipe):**
 
 ```python
-# modal_vllm.py
+import json
+import subprocess
 import modal
 
-app = modal.App("ollyuw-vllm")
+MODEL_NAME = "google/gemma-4-26B-A4B-it"
+MODEL_REVISION = "47b6801b24d15ff9bcd8c96dfaea0be9ed3a0301"
+VLLM_PORT = 8000
+MINUTES = 60
 
-# Cache model weights across cold starts — critical for 15.6GB download
-hf_cache_vol = modal.Volume.from_name("hf-cache", create_if_missing=True)
+app = modal.App("ollyuw-vllm-turboquant")
+
+# Two-volume cache split per Modal best practice:
+#   HF weights cache  → no re-download of 15.6 GB on cold start
+#   vLLM compile cache → no recompilation of CUDA graphs on cold start
+hf_cache_vol   = modal.Volume.from_name("ollyuw-huggingface-cache", create_if_missing=True)
+vllm_cache_vol = modal.Volume.from_name("ollyuw-vllm-cache",        create_if_missing=True)
 
 vllm_image = (
     modal.Image.from_registry("nvidia/cuda:12.9.0-devel-ubuntu22.04", add_python="3.12")
-    .pip_install(
-        "vllm==0.19.0",
-        "transformers==5.5.0",        # required for Gemma 4 support
-        "huggingface_hub[hf_transfer]",
-    )
-    .env({"HF_HUB_ENABLE_HF_TRANSFER": "1"})
+    .entrypoint([])
+    .uv_pip_install("vllm==0.21.0")    # transformers resolved automatically
+    .env({"HF_XET_HIGH_PERFORMANCE": "1", "HF_HUB_ENABLE_HF_TRANSFER": "1"})
 )
 
 @app.function(
-    gpu="A10G",
     image=vllm_image,
-    container_idle_timeout=300,   # 5 min idle — stays warm between demo steps
-    timeout=600,
-    volumes={"/root/.cache/huggingface": hf_cache_vol},
+    gpu="A10G",                        # 24 GB; H200/H100 in official recipe — too expensive
+    scaledown_window=5 * MINUTES,
+    timeout=10 * MINUTES,
+    volumes={
+        "/root/.cache/huggingface": hf_cache_vol,
+        "/root/.cache/vllm":        vllm_cache_vol,
+    },
 )
-@modal.asgi_app()
-@modal.concurrent(max_inputs=1)   # one session at a time, full KV cache for it
+@modal.concurrent(max_inputs=10)
+@modal.web_server(port=VLLM_PORT, startup_timeout=10 * MINUTES)
 def serve():
-    from vllm.entrypoints.openai.api_server import build_app
-    return build_app(
-        model="google/gemma-4-26B-A4B-it",   # -it = instruction-tuned
-        quantization="awq",                    # INT4 — fits in 15.6GB of 24GB VRAM
-        kv_cache_dtype="turboquant_k8v4",      # 2.6x KV compression, +1.17% PPL (native vLLM 0.19+)
-        max_model_len=32768,
-        gpu_memory_utilization=0.93,
-        dtype="auto",
-    )
+    cmd = [
+        "vllm", "serve", MODEL_NAME,
+        "--revision", MODEL_REVISION,
+        "--served-model-name", MODEL_NAME, "llm",
+        "--host", "0.0.0.0", "--port", str(VLLM_PORT),
+
+        # Performance
+        "--async-scheduling",
+        "--no-enforce-eager",                       # CUDA graphs on; slower cold start, faster steady-state
+        "--tensor-parallel-size", "1",
+        "--gpu-memory-utilization", "0.93",
+        "--enable-prefix-caching",                  # critical: reuse system prompt + earlier agent turns
+
+        # Memory
+        "--quantization", "awq",                    # INT4 weights, ~15.6 GB
+        "--kv-cache-dtype", "turboquant_k8v4",      # 2.6x KV compression, +1.17% PPL
+        "--max-model-len", "131072",                # 128K — TurboQuant gives ~125K headroom
+
+        # No multimodal in LLM (we pre-parse images upstream)
+        "--limit-mm-per-prompt",
+        f"'{json.dumps({'image': 0, 'video': 0, 'audio': 0})}'",
+
+        # Gemma 4 tool calling — required for LangGraph agent
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",  "gemma4",
+        "--reasoning-parser",  "gemma4",
+    ]
+    subprocess.Popen(" ".join(cmd), shell=True)
 ```
 
+**Why this pattern (not `@modal.asgi_app()` + `build_app`):** vLLM is not a clean ASGI factory; calling `build_app(model=...)` directly does not match the function's real signature. The canonical Modal recipe uses `@modal.web_server(port=...)` and launches `vllm serve` as a subprocess inside the container — Modal exposes the port externally as an OpenAI-compatible URL.
+
+**Optimizations applied (sourced from Modal's `vllm_inference` + `sglang_low_latency` examples):**
+
+| Flag / setting                                                | Win                                                                 |
+|---------------------------------------------------------------|---------------------------------------------------------------------|
+| `--enable-prefix-caching`                                     | Agent reuses system prompt + earlier turns ⇒ ~30–50% lower TTFT     |
+| `--kv-cache-dtype turboquant_k8v4`                            | 2.6× KV compression, +1.17% PPL ⇒ 128K context on A10G              |
+| `--quantization awq`                                          | Weights at INT4 ⇒ 15.6 GB on A10G                                   |
+| `--async-scheduling`                                          | Overlap scheduling and GPU compute                                  |
+| `--no-enforce-eager`                                          | CUDA graphs ⇒ +10–20% steady-state throughput                       |
+| `--gpu-memory-utilization 0.93`                               | +700 MB of KV cache headroom vs default 0.90                        |
+| Two-volume cache split (`huggingface-cache` + `vllm-cache`)   | Cold start drops from ~5 min to ~30 s after first run               |
+| `HF_XET_HIGH_PERFORMANCE=1`                                   | Faster HF Hub downloads                                             |
+| `--limit-mm-per-prompt {image:0, video:0, audio:0}`           | Disables multimodal slots we don't use                              |
+| `--tool-call-parser gemma4` + `--reasoning-parser gemma4`     | Correct Gemma-4 tool-call extraction (required for LangGraph)       |
+| `MODEL_REVISION` pin                                          | Reproducibility — HF model can't shift under us mid-build           |
+
+**Not applied (and why):**
+
+- **EAGLE speculative decoding** — needs a Gemma 4 specific draft model; none published yet. The SGLang example uses MTP which is model-internal; Gemma 4 doesn't expose that.
+- **Sticky routing via `modal.experimental.http_server`** — only matters when multiple containers serve the same session. We're a single-user demo with `max_inputs=10`, so one container handles everything.
+- **`H200` / `H100` in the official recipe** — too expensive for the $28 budget. A10G fits 15.6 GB INT4 weights with room for 128 K context after TurboQuant.
+
 **Why Gemma 4 26B-A4B:**
-- MoE: 26B total, 3.8B active params — same VRAM cost as dense 26B but ~30% faster decode throughput
-- 256K native context window; 32K practical on A10G with INT4 weights
+- MoE: 26 B total, 3.8 B active params — same VRAM cost as dense 26 B but ~30% faster decode throughput
+- 256 K native context window; 128 K usable on A10G with TurboQuant K8V4
 - 82.6 MMLU-Pro, strong instruction-following and tool-calling quality
 - Apache 2.0 license
 
 **Budget on A10G @ $1.10/hr with $28 credits:**
 - Total active GPU time: 25.4 hours
-- Cost per full underwriting run (~30 LLM calls × 15s): ~$0.14
-- Cold start cost (one per session, ~3 min): ~$0.055
+- Cost per full underwriting run (~30 LLM calls × 15 s): ~$0.14
+- Cold start cost (one per session, ~3 min): ~$0.055 — drops to ~$0.01 with both cache volumes warm
 - Effective development budget: 70+ hours of active coding — very comfortable
 
-**E2B handles the rest:** agent orchestration, file I/O, and sandbox isolation run on E2B's free tier. No Modal Volume for the agent — only the HF cache volume for model weights. The Modal endpoint URL is passed as an env var into the E2B sandbox at runtime.
-
-**TurboQuant KV cache compression — native in vLLM 0.19+, already applied above:**
-
-TurboQuant (Google, ICLR 2026) is a training-free KV cache quantization technique built into vLLM as named `kv_cache_dtype` presets. It applies Hadamard rotation + Lloyd-Max scalar quantization to keys/values at inference time — no retraining, no calibration data, completely separate from weight quantization (stacks on top of AWQ INT4).
-
-Presets available via `kv_cache_dtype`:
-- `turboquant_k8v4`: **2.6× compression, +1.17% PPL** ← used above (safe)
+**TurboQuant presets reference** (`--kv-cache-dtype` values, native vLLM 0.19+):
+- `turboquant_k8v4`: **2.6× compression, +1.17% PPL** ← what we use (safe)
 - `turboquant_4bit_nc`: 3.8× compression, +2.71% PPL (more aggressive, still OK)
 - `turboquant_3bit_nc`: 4.9× compression, +20.59% PPL (too lossy for underwriting)
 
-With `turboquant_k8v4` on A10G: KV cache footprint drops 2.6×, pushing effective context from ~32K to ~80K tokens. Faster attention compute is a bonus.
+**E2B handles the rest:** agent orchestration, file I/O, and sandbox isolation run on E2B's free tier. Modal volumes only hold model weights and compile artifacts. The Modal endpoint URL is passed as an env var into the E2B sandbox at runtime.
 
 ### 13.3 Cost + Latency Table
 
