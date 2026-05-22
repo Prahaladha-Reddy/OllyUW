@@ -987,6 +987,7 @@ dependencies = [
     { name = "langchain-openai" },
     { name = "modal" },
     { name = "python-dotenv" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -995,6 +996,7 @@ requires-dist = [
     { name = "langchain-openai", specifier = ">=1.2.2" },
     { name = "modal", specifier = ">=1.4.3" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "requests", specifier = ">=2.34.2" },
 ]
 
 [[package]]
