@@ -1,21 +1,3 @@
-"""LangChain smoke test for Modal-hosted Gemma and DeepSeek.
-
-Examples:
-    uv run python src/service_provider/test_inference.py --provider modal-standard
-    uv run python src/service_provider/test_inference.py --provider modal-turbo
-    uv run python src/service_provider/test_inference.py --provider deepseek
-    uv run python src/service_provider/test_inference.py --provider deepseek --chat
-
-Environment:
-    MODAL_STANDARD_BASE_URL=https://<workspace>--ollyuw-vllm-standard-serve.modal.run
-    MODAL_TURBO_BASE_URL=https://<workspace>--ollyuw-vllm-turboquant-serve.modal.run
-    MODAL_API_KEY=unused
-
-    DEEPSEEK_API_KEY=...
-    DEEPSEEK_BASE_URL=https://api.deepseek.com
-    DEEPSEEK_MODEL=deepseek-v4-flash
-"""
-
 from __future__ import annotations
 
 import argparse
