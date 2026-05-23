@@ -1,15 +1,11 @@
 import { Brand } from "./Brand.jsx";
 import { NavButton } from "../navigation/NavButton.jsx";
 
-export function Header({ onNavigate, session, onSignOut }) {
+export function Header({ onNavigate, session }) {
   return (
     <header className="site-header">
       <Brand onNavigate={onNavigate} />
-      {session ? (
-        <button className="pill-button" type="button" onClick={onSignOut}>
-          Sign out
-        </button>
-      ) : (
+      {!session && (
         <NavButton className="pill-button" route="auth" onNavigate={onNavigate}>
           Start review
         </NavButton>

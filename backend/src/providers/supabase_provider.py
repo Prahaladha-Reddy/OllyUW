@@ -1,44 +1,48 @@
+"""
+Supabase client factory.
+No queries here — repositories use these clients, storage_provider uses them too.
+"""
 from __future__ import annotations
+
+import threading
+
+from supabase import Client, create_client
 
 from src.config import get_settings
 
-_client = None
-_service_client = None
+_lock = threading.Lock()
+_anon_client: Client | None = None
+_service_client: Client | None = None
 
 
-def get_client():
-    """Publishable-key client — used for auth operations."""
-    global _client
-    if _client is not None:
-        return _client
+def get_anon_client() -> Client:
+    """Publishable / anon key client. Use for auth flows that act AS the user."""
+    global _anon_client
+    if _anon_client is not None:
+        return _anon_client
 
-    settings = get_settings()
-    if not settings.supabase_url or not settings.supabase_publishable_key:
-        raise RuntimeError(
-            "Supabase is not configured. Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in .env."
-        )
-
-    from supabase import create_client
-
-    _client = create_client(settings.supabase_url, settings.supabase_publishable_key)
-    return _client
+    with _lock:
+        if _anon_client is not None:
+            return _anon_client
+        settings = get_settings()
+        if not settings.supabase.url or not settings.supabase.publishable_key:
+            raise RuntimeError("Supabase is not configured: missing SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY")
+        _anon_client = create_client(settings.supabase.url, settings.supabase.publishable_key)
+    return _anon_client
 
 
-def get_service_client():
-    """Secret-key client — used for storage operations (bypasses RLS).
-    Falls back to the publishable-key client if SUPABASE_SECRET_KEY is not set."""
+def get_service_client() -> Client:
+    """Service-role key client. Use for backend-only DB / Storage ops that bypass RLS."""
     global _service_client
     if _service_client is not None:
         return _service_client
 
-    settings = get_settings()
-    key = settings.supabase_secret_key or settings.supabase_publishable_key
-    if not settings.supabase_url or not key:
-        raise RuntimeError(
-            "Supabase is not configured. Set SUPABASE_URL and SUPABASE_SECRET_KEY in .env."
-        )
-
-    from supabase import create_client
-
-    _service_client = create_client(settings.supabase_url, key)
+    with _lock:
+        if _service_client is not None:
+            return _service_client
+        settings = get_settings()
+        key = settings.supabase.secret_key or settings.supabase.publishable_key
+        if not settings.supabase.url or not key:
+            raise RuntimeError("Supabase is not configured: missing SUPABASE_URL or SUPABASE_SECRET_KEY")
+        _service_client = create_client(settings.supabase.url, key)
     return _service_client

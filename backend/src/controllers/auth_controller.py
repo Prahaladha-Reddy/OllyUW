@@ -1,74 +1,40 @@
 from __future__ import annotations
 
-import asyncio
-import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 
-from src.dependencies import require_auth
+from src.dependencies import get_auth_service, require_auth
 from src.models.auth import AuthResponse, LoginRequest, SignUpRequest, UserResponse
-from src.providers import supabase_provider
+from src.services.auth_service import AuthService
 
-logger = logging.getLogger("ollyuw.auth")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/signup", response_model=AuthResponse, status_code=201)
-async def signup(req: SignUpRequest):
-    try:
-        client = supabase_provider.get_client()
-        result = await asyncio.to_thread(
-            client.auth.sign_up, {"email": req.email, "password": req.password}
-        )
-        if not result.session:
-            # Email confirmation is enabled in Supabase — user must confirm before they get tokens.
-            return JSONResponse(
-                status_code=202,
-                content={"status": "pending_confirmation", "email": result.user.email},
-            )
-        return AuthResponse(
-            access_token=result.session.access_token,
-            refresh_token=result.session.refresh_token,
-            user_id=result.user.id,
-            email=result.user.email,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("signup error: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+async def signup(
+    req: SignUpRequest,
+    auth: Annotated[AuthService, Depends(get_auth_service)],
+):
+    result = await auth.signup(req.email, req.password)
+    if isinstance(result, AuthResponse):
+        return result
+    return JSONResponse(status_code=202, content=result)
 
 
 @router.post("/login", response_model=AuthResponse)
-async def login(req: LoginRequest) -> AuthResponse:
-    try:
-        client = supabase_provider.get_client()
-        result = await asyncio.to_thread(
-            client.auth.sign_in_with_password,
-            {"email": req.email, "password": req.password},
-        )
-        if not result.session:
-            raise HTTPException(status_code=401, detail="Invalid credentials")
-        return AuthResponse(
-            access_token=result.session.access_token,
-            refresh_token=result.session.refresh_token,
-            user_id=result.user.id,
-            email=result.user.email,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error("login error: %s", exc)
-        raise HTTPException(status_code=401, detail="Invalid email or password") from exc
+async def login(
+    req: LoginRequest,
+    auth: Annotated[AuthService, Depends(get_auth_service)],
+) -> AuthResponse:
+    return await auth.login(req.email, req.password)
 
 
-@router.post("/logout", status_code=204)
-async def logout(current_user: Annotated[dict, Depends(require_auth)]) -> None:
-    # Supabase JWTs are stateless short-lived tokens; the client discards them.
-    # Server-side revocation via admin API can be added when needed.
-    pass
+@router.post("/logout")
+async def logout(_: Annotated[dict, Depends(require_auth)]) -> Response:
+    # Supabase JWTs are stateless; the client just discards them.
+    return Response(status_code=204)
 
 
 @router.get("/me", response_model=UserResponse)

@@ -1,13 +1,13 @@
 import { getPathForRoute } from "../../routing/routes.js";
 
-export function NavButton({ children, className, onNavigate, route, ...props }) {
+export function NavButton({ children, className, onNavigate, params, route, ...props }) {
   return (
     <a
       className={className}
-      href={getPathForRoute(route)}
+      href={getPathForRoute(route, params)}
       onClick={(event) => {
         event.preventDefault();
-        onNavigate(route);
+        onNavigate(route, params);
       }}
       {...props}
     >

@@ -11,7 +11,7 @@ export function AuthPage({ session, onNavigate }) {
 
   useEffect(() => {
     if (session) {
-      onNavigate("home");
+      onNavigate("projects", {}, { replace: true });
     }
   }, [session]);
 
@@ -116,7 +116,7 @@ export function AuthPage({ session, onNavigate }) {
             </div>
 
             <button className="pill-button auth-submit" type="submit" disabled={loading}>
-              {loading ? "Loading…" : isSignUp ? "Create account" : "Continue"}
+              {loading ? "Loading..." : isSignUp ? "Create account" : "Continue"}
             </button>
             {message && <p className="form-note">{message}</p>}
           </form>

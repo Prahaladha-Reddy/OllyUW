@@ -17,28 +17,12 @@ class SessionMeta(BaseModel):
 
     session_id: str
     sandbox_id: str
+    conversation_id: str | None = None
     input_stream: str
     output_channel: str
     heartbeat_key: str
     status: SessionStatus = SessionStatus.CREATING
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-
-class CreateSessionResponse(BaseModel):
-    session_id: str
-    sandbox_id: str
-    input_stream: str
-    output_channel: str
-
-
-class ChatRequest(BaseModel):
-    message: str
-
-
-class ChatResponse(BaseModel):
-    ok: bool
-    session_id: str
-    message_id: str
 
 
 class SessionStatusResponse(BaseModel):
@@ -49,5 +33,6 @@ class SessionStatusResponse(BaseModel):
     status: SessionStatus
 
 
-class FilesResponse(BaseModel):
-    files: list[str]
+class WorkerLogResponse(BaseModel):
+    session_id: str
+    log: str

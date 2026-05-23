@@ -1,0 +1,4 @@
+
+ALTER TABLE conversations ADD COLUMN IF NOT EXISTS session_id TEXT;
+
+DROP TABLE IF EXISTS messages;

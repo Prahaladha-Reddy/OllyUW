@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel
 
 from src.providers import redis_provider
@@ -20,12 +20,3 @@ async def health() -> HealthResponse:
     except Exception:
         redis_ok = False
     return HealthResponse(ok=redis_ok, redis=redis_ok)
-
-
-@router.get("/health/redis")
-async def redis_health() -> dict:
-    try:
-        ok = await redis_provider.ping()
-        return {"ok": ok}
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Redis unavailable: {exc}") from exc
