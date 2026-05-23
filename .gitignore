@@ -4,3 +4,7 @@ __pycache__/
 .env
 .env
 .claude
+node_modules/
+dist/
+vite-dev.log
+vite-dev.err.log

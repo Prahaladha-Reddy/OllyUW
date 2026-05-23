@@ -4,11 +4,8 @@ import threading
 from pathlib import Path
 
 from e2b import Sandbox
-from dotenv import load_dotenv
 from src.config import get_settings
 from src.models.session import SessionMeta
-
-load_dotenv()
 AGENT_WORKER = Path(__file__).parent.parent.parent.parent / "e2b-template" / "agent" / "worker.py"
 AGENT_TOOLS = Path(__file__).parent.parent.parent.parent / "e2b-template" / "agent" / "tools.py"
 
@@ -82,6 +79,10 @@ def _build_env(session: SessionMeta, settings=None) -> dict[str, str]:
         "DEEPSEEK_API_KEY": settings.deepseek_api_key,
         "DEEPSEEK_BASE_URL": settings.deepseek_base_url,
         "DEEPSEEK_MODEL": settings.deepseek_model,
+        # LangSmith tracing — worker uses LangChain which reads these from os.environ
+        "LANGSMITH_API_KEY": settings.langsmith_api_key,
+        "LANGSMITH_ENDPOINT": settings.langsmith_base_url,
+        "LANGCHAIN_TRACING_V2": str(settings.langsmith_tracing).lower(),
     }
 
 

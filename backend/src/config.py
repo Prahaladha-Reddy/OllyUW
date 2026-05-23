@@ -11,8 +11,8 @@ ROOT = Path(__file__).parent.parent.parent
 class Settings(BaseSettings):
     # E2B
     e2b_api_key: str
-    e2b_template_id: str = "base"  # override once custom template is built
-    e2b_sandbox_timeout: int = 1200  # seconds before idle sandbox is killed (20 min)
+    e2b_template_id: str = "base"
+    e2b_sandbox_timeout: int = 1200  # seconds before idle sandbox is killed
 
     # Redis
     redis_url: str
@@ -30,7 +30,21 @@ class Settings(BaseSettings):
 
     # Supabase
     supabase_url: str = ""
-    supabase_key: str = ""
+    supabase_publishable_key: str = ""   # anon / public key
+    supabase_secret_key: str = ""        # service-role key — used for storage (bypasses RLS)
+    supabase_bucket: str = "submissions"
+
+    # Unstructured
+    unstructured_api_key: str = ""
+
+    # LangSmith
+    langsmith_api_key: str = ""
+    langsmith_base_url: str = "https://smith.langchain.com"
+    langsmith_tracing: bool = False
+
+    # URLs
+    backend_url: str = "http://localhost:8000"   # set to real domain in prod
+    frontend_url: str = ""                        # set to real frontend URL in prod; JSON fallback if empty
 
     # Server
     host: str = "0.0.0.0"

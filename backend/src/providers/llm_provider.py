@@ -2,13 +2,12 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Any
-from dotenv import load_dotenv
 
 from langchain_openai import ChatOpenAI
 
 from src.config import get_settings
 
-load_dotenv()
+
 class LLMMode(str, Enum):
     MODAL_STANDARD = "modal_standard"
     MODAL_TURBO = "modal_turbo"

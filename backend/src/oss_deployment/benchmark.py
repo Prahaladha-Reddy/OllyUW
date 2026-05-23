@@ -1,15 +1,3 @@
-"""
-Cost + latency benchmark for the Modal OSS deployment.
-
-Usage:
-    uv run python -m src.oss_deployment.benchmark [--mode turbo|standard] [--runs N]
-
-Outputs a markdown table:
-    Scenario | Input Tok | Output Tok | TTFT (s) | Latency (s) | Tok/s | GPU $/req
-
-Pricing reference: Modal L40S @ $1.922/hr = $0.000534/s per GPU
-vLLM /metrics endpoint is on the same base URL — no extra infra needed.
-"""
 from __future__ import annotations
 
 import argparse
@@ -26,10 +14,8 @@ from openai import OpenAI
 
 load_dotenv()
 
-# ── Pricing ──────────────────────────────────────────────────────────────────
 L40S_COST_PER_SECOND = 1.922 / 3600  # $0.000534/s
 
-# ── Test scenarios (realistic underwriting inputs) ────────────────────────────
 SCENARIOS = [
     {
         "name": "Short / quote check",
