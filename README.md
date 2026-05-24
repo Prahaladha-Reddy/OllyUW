@@ -262,13 +262,3 @@ Run the reportable E2B agent eval:
 $env:PYTHONPATH = (Get-Location).Path
 uv run --project backend python -m evals.runners.all --harness e2b-agent --models modal,deepseek --concurrency 10
 ```
-
-## Current Caveats
-
-- `plan.md` is the source design document, but it is intentionally gitignored.
-- `evals/reports/` is ignored because reports are generated artifacts.
-- Modal endpoints must expose the expected OpenAI-compatible `/v1` surface before
-  the LangChain smoke test can succeed.
-- The local app depends on working Supabase, Redis, E2B, and model-provider
-  credentials; missing credentials will fail at runtime rather than at install
-  time.
