@@ -111,6 +111,18 @@ export function uploadConversationFiles(session, projectId, conversationId, file
   });
 }
 
+export function listWorkspaceFiles(session, projectId, conversationId) {
+  return apiRequest(session, `/projects/${projectId}/conversations/${conversationId}/workspace`);
+}
+
+export async function downloadWorkspaceFile(session, projectId, conversationId, filePath) {
+  const token = await getAccessToken(session);
+  const url = `${API_BASE_URL}/projects/${projectId}/conversations/${conversationId}/workspace/${filePath}`;
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) throw new Error("Download failed");
+  return response.blob();
+}
+
 // SSE stream using fetch (EventSource can't set Authorization header).
 // Pass an AbortSignal so the caller can close the connection on `final` —
 // otherwise the backend keeps the Redis subscription open and any later

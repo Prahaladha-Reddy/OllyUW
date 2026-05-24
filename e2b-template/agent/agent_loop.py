@@ -41,7 +41,7 @@ def process_message(user_text: str, model: str = DEFAULT_MODEL) -> None:
         heartbeat()
         publish({"type": STATUS, "text": f"Step {step_idx + 1}/{MAX_STEPS}"})
 
-        turn = model_step(messages, model, step_idx + 1, emit_text=False)
+        turn = model_step(messages, model, step_idx + 1, emit_text=True)
         if turn.get("text"):
             transcript.append(turn["text"])
 

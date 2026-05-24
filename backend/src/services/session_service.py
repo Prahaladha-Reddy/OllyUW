@@ -149,6 +149,34 @@ class SessionService:
             await pubsub.aclose()
 
 
+    async def list_workspace_files(
+        self, user_id: str, project_id: str, conversation_id: str,
+    ) -> list[str]:
+        conv = await self._require_conversation(user_id, project_id, conversation_id)
+        session_id = conv.get("session_id")
+        if not session_id:
+            return []
+        sandbox = await e2b_provider.get(session_id)
+        if sandbox is None:
+            return []
+        paths = await asyncio.to_thread(e2b_provider.list_workspace_files, sandbox)
+        return [p.removeprefix("/home/user/workspace/") for p in paths]
+
+    async def read_workspace_file(
+        self, user_id: str, project_id: str, conversation_id: str, relative_path: str,
+    ) -> bytes:
+        conv = await self._require_conversation(user_id, project_id, conversation_id)
+        session_id = conv.get("session_id")
+        if not session_id:
+            raise HTTPException(status_code=410, detail="Workspace session expired.")
+        sandbox = await e2b_provider.get(session_id)
+        if sandbox is None:
+            raise HTTPException(status_code=410, detail="Workspace session expired. Send a message to restart.")
+        try:
+            return await asyncio.to_thread(e2b_provider.read_workspace_file, sandbox, relative_path)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail=f"File not found: {relative_path}")
+
     async def push_files_to_sandbox(
         self,
         user_id: str,

@@ -11,3 +11,4 @@ vite-dev.err.log
 project/
 evals/reports/*
 !evals/reports/.gitkeep
+plan.md

@@ -2831,14 +2831,22 @@ p {
 /* ── Conversation View ── */
 .conv-view {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
   overflow: hidden;
   background: #0d1117;
 }
 
+.conv-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .conv-header {
-  padding: 0.625rem max(1.5rem, calc((100% - 740px) / 2));
+  padding: 0.625rem 1.5rem 0.625rem max(1.5rem, calc((100% - 740px) / 2));
   border-bottom: 1px solid #21262d;
   display: flex;
   align-items: center;
@@ -3016,6 +3024,134 @@ p {
   font-size: 0.6875rem;
   color: #7d8590;
   font-family: var(--font-ui);
+}
+
+/* ── Workspace toggle button (in header) ── */
+.conv-workspace-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.75rem;
+  font-family: var(--font-ui);
+  color: #7d8590;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+.conv-workspace-btn:hover { border-color: #58a6ff; color: #58a6ff; }
+.conv-workspace-btn.active { border-color: #388bfd; color: #58a6ff; background: #0d1f35; }
+
+.conv-workspace-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: #388bfd;
+  color: #fff;
+  border-radius: 99px;
+  font-size: 0.625rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Workspace right panel ── */
+.conv-workspace-panel {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid #21262d;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+}
+
+.conv-workspace-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.625rem 1rem;
+  border-bottom: 1px solid #21262d;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: #e6edf3;
+  flex-shrink: 0;
+}
+
+.conv-workspace-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #7d8590;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.conv-workspace-close:hover { background: #21262d; color: #c9d1d9; }
+
+.conv-workspace-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.75rem 0;
+}
+
+.conv-workspace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 3rem 1.5rem;
+  color: #484f58;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+.conv-workspace-empty span:first-of-type { color: #7d8590; font-weight: 500; }
+
+.conv-workspace-file-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.conv-workspace-file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  color: #c9d1d9;
+  font-family: var(--font-ui);
+  font-size: 0.8125rem;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s;
+}
+.conv-workspace-file-item:hover { background: #161b22; }
+.conv-workspace-file-item:hover .conv-workspace-file-dl { opacity: 1; }
+
+.conv-workspace-file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conv-workspace-file-dl {
+  color: #7d8590;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.1s;
 }
 
 /* ── Message Input ── */

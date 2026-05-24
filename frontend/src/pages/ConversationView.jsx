@@ -1,11 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
-import { Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, Download, FolderOpen, FileText, X } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useModel } from '../context/ModelContext'
 import { useProject, useMessages, useUploadConversationFiles, useSendMessage } from '../hooks/queries'
 import { queryClient } from '../lib/queryClient'
-import { streamConversation } from '../lib/api'
+import { streamConversation, listWorkspaceFiles, downloadWorkspaceFile } from '../lib/api'
 import { MessageList } from '../components/workspace/MessageList'
 import { MessageInput } from '../components/workspace/MessageInput'
 
@@ -31,6 +31,8 @@ export function ConversationView() {
   const [liveStatus, setLiveStatus] = useState(null)
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState(null)
+  const [workspaceFiles, setWorkspaceFiles] = useState([])
+  const [showWorkspace, setShowWorkspace] = useState(false)
 
   const abortRef = useRef(null)
   const uploadFiles = useUploadConversationFiles(projectId, conversationId)
@@ -102,6 +104,16 @@ export function ConversationView() {
         queryKey: ['messages', projectId, conversationId],
         type: 'active',
       })
+
+      // Refresh workspace file list after every successful agent turn.
+      try {
+        const result = await listWorkspaceFiles(session, projectId, conversationId)
+        const files = result.files ?? []
+        setWorkspaceFiles(files)
+        if (files.length > 0) setShowWorkspace(true)
+      } catch {
+        // Non-fatal — workspace panel just stays empty
+      }
     } catch (err) {
       if (err.name !== 'AbortError') {
         setSendError(err.message ?? 'Something went wrong. Try again.')
@@ -115,6 +127,20 @@ export function ConversationView() {
       setIsSending(false)
     }
   }, [session, projectId, conversationId, isSending, modelId, uploadFiles, sendMessage])
+
+  const handleDownload = useCallback(async (filePath) => {
+    try {
+      const blob = await downloadWorkspaceFile(session, projectId, conversationId, filePath)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filePath.split('/').pop()
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      // silently ignore; user sees nothing happen — acceptable for MVP
+    }
+  }, [session, projectId, conversationId])
 
   // First-message handoff from ProjectDetail. When a conversation is created
   // by typing in the project chat-bar, the text is passed via nav state so
@@ -151,33 +177,80 @@ export function ConversationView() {
 
   return (
     <div className="conv-view">
-      <div className="conv-header">
-        <Link to={`/projects/${projectId}`} className="conv-header-breadcrumb">
-          {project?.name ?? '…'}
-        </Link>
-        <span className="conv-header-sep">/</span>
-        <span className="conv-header-title">{conversation?.title ?? 'Conversation'}</span>
+      <div className="conv-main">
+        <div className="conv-header">
+          <Link to={`/projects/${projectId}`} className="conv-header-breadcrumb">
+            {project?.name ?? '…'}
+          </Link>
+          <span className="conv-header-sep">/</span>
+          <span className="conv-header-title">{conversation?.title ?? 'Conversation'}</span>
+          <button
+            className={`conv-workspace-btn${showWorkspace ? ' active' : ''}`}
+            onClick={() => setShowWorkspace((v) => !v)}
+          >
+            <FolderOpen size={13} />
+            Workspace
+            {workspaceFiles.length > 0 && (
+              <span className="conv-workspace-badge">{workspaceFiles.length}</span>
+            )}
+          </button>
+        </div>
+
+        {sendError && (
+          <div className="conv-error-banner">{sendError}</div>
+        )}
+
+        <MessageList
+          messages={messages}
+          optimisticUserMessage={optimisticUserMsg}
+          streamingText={streamingText}
+          streamingModel={modelId}
+          liveToolCalls={liveToolCalls}
+          liveStatus={liveStatus}
+          isStreaming={isSending}
+        />
+
+        <MessageInput
+          disabled={isSending}
+          onSend={handleSend}
+          placeholder={project?.name ? `Ask a question about ${project.name}…` : 'Ask a question about the documents…'}
+        />
       </div>
 
-      {sendError && (
-        <div className="conv-error-banner">{sendError}</div>
+      {showWorkspace && (
+        <div className="conv-workspace-panel">
+          <div className="conv-workspace-panel-header">
+            <span>Workspace</span>
+            <button className="conv-workspace-close" onClick={() => setShowWorkspace(false)}>
+              <X size={14} />
+            </button>
+          </div>
+          <div className="conv-workspace-panel-body">
+            {workspaceFiles.length === 0 ? (
+              <div className="conv-workspace-empty">
+                <FolderOpen size={32} strokeWidth={1.25} />
+                <span>No files yet</span>
+                <span>Files the agent creates will appear here.</span>
+              </div>
+            ) : (
+              <div className="conv-workspace-file-list">
+                {workspaceFiles.map((f) => (
+                  <button
+                    key={f}
+                    className="conv-workspace-file-item"
+                    onClick={() => handleDownload(f)}
+                    title={f}
+                  >
+                    <FileText size={14} />
+                    <span className="conv-workspace-file-name">{f.split('/').pop()}</span>
+                    <Download size={13} className="conv-workspace-file-dl" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       )}
-
-      <MessageList
-        messages={messages}
-        optimisticUserMessage={optimisticUserMsg}
-        streamingText={streamingText}
-        streamingModel={modelId}
-        liveToolCalls={liveToolCalls}
-        liveStatus={liveStatus}
-        isStreaming={isSending}
-      />
-
-      <MessageInput
-        disabled={isSending}
-        onSend={handleSend}
-        placeholder={project?.name ? `Ask a question about ${project.name}…` : 'Ask a question about the documents…'}
-      />
     </div>
   )
 }

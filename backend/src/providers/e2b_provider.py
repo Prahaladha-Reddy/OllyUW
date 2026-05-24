@@ -162,6 +162,17 @@ def list_workspace_files(sandbox: Sandbox) -> list[str]:
     return [f for f in result.stdout.strip().splitlines() if f]
 
 
+def read_workspace_file(sandbox: Sandbox, relative_path: str) -> bytes:
+    """Read a file from /home/user/workspace. Raises FileNotFoundError if missing."""
+    safe = relative_path.lstrip("/").replace("..", "")
+    abs_path = f"/home/user/workspace/{safe}"
+    result = sandbox.commands.run(f"test -f {abs_path} && echo EXISTS", timeout=5)
+    if "EXISTS" not in result.stdout:
+        raise FileNotFoundError(f"workspace file not found: {relative_path}")
+    data = sandbox.files.read(abs_path)
+    return data.encode("utf-8") if isinstance(data, str) else bytes(data)
+
+
 def read_worker_log(sandbox: Sandbox, tail_lines: int = 200) -> str:
     result = sandbox.commands.run(
         f"tail -n {tail_lines} {WORKER_LOG} 2>/dev/null || echo '(no log yet)'",

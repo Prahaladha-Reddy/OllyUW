@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Annotated
 
+import mimetypes
+
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.responses import StreamingResponse
 
@@ -130,6 +132,37 @@ async def upload_files_to_conversation(
         file_records=result.files,
     )
     return result
+
+
+@router.get("/{conversation_id}/workspace")
+async def list_workspace_files(
+    project_id: str,
+    conversation_id: str,
+    service: Annotated[SessionService, Depends(get_session_service)],
+    current_user: Annotated[dict, Depends(require_auth)],
+) -> dict:
+    """List files the agent wrote to its workspace during this conversation."""
+    files = await service.list_workspace_files(current_user["user_id"], project_id, conversation_id)
+    return {"files": files}
+
+
+@router.get("/{conversation_id}/workspace/{file_path:path}")
+async def download_workspace_file(
+    project_id: str,
+    conversation_id: str,
+    file_path: str,
+    service: Annotated[SessionService, Depends(get_session_service)],
+    current_user: Annotated[dict, Depends(require_auth)],
+) -> Response:
+    """Download a specific file from the agent's workspace."""
+    data = await service.read_workspace_file(current_user["user_id"], project_id, conversation_id, file_path)
+    filename = file_path.split("/")[-1]
+    mime, _ = mimetypes.guess_type(filename)
+    return Response(
+        content=data,
+        media_type=mime or "application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{conversation_id}/stream")
