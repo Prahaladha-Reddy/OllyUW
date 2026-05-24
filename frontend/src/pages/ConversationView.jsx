@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useModel } from '../context/ModelContext'
@@ -11,14 +11,24 @@ import { MessageInput } from '../components/workspace/MessageInput'
 
 export function ConversationView() {
   const { projectId, conversationId } = useParams()
+  const location = useLocation()
+  const navigate = useNavigate()
   const { session } = useAuth()
   const { modelId } = useModel()
 
   const { data: project } = useProject(projectId)
   const { data: messages = [], isLoading, error } = useMessages(projectId, conversationId)
 
+  // Local UI state for in-flight send:
+  //   optimisticUserMsg  — text user just submitted (shown immediately, no server round-trip)
+  //   streamingText      — accumulated `text_delta` deltas during streaming
+  //   liveToolCalls      — tool calls the agent fired during this turn (visible as chips)
+  //   liveStatus         — most recent `status` event (e.g. "Step 2/12")
+  //   isSending          — true between submit and end-of-stream
   const [optimisticUserMsg, setOptimisticUserMsg] = useState(null)
   const [streamingText, setStreamingText] = useState('')
+  const [liveToolCalls, setLiveToolCalls] = useState([])
+  const [liveStatus, setLiveStatus] = useState(null)
   const [isSending, setIsSending] = useState(false)
   const [sendError, setSendError] = useState(null)
 
@@ -36,6 +46,8 @@ export function ConversationView() {
     setSendError(null)
     setOptimisticUserMsg(text)
     setStreamingText('')
+    setLiveToolCalls([])
+    setLiveStatus('Starting…')
 
     abortRef.current?.abort()
     const controller = new AbortController()
@@ -48,12 +60,43 @@ export function ConversationView() {
       for await (const event of streamConversation(
         session, projectId, conversationId, controller.signal,
       )) {
-        if (event.type === 'text_delta') {
-          setStreamingText((prev) => prev + (event.text ?? ''))
-        } else if (event.type === 'final') {
-          break
+        switch (event.type) {
+          case 'text_delta':
+            setStreamingText((prev) => prev + (event.text ?? ''))
+            break
+          case 'status':
+            if (event.text) setLiveStatus(event.text)
+            break
+          case 'tool_call':
+            setLiveToolCalls((prev) => [
+              ...prev,
+              { id: event.id, tool: event.tool, args: event.args, status: 'running' },
+            ])
+            setLiveStatus(`Calling ${event.tool}…`)
+            break
+          case 'tool_result':
+            setLiveToolCalls((prev) =>
+              prev.map((t) =>
+                t.id === event.id ? { ...t, status: event.ok ? 'done' : 'error', output: event.output } : t,
+              ),
+            )
+            break
+          case 'error':
+            throw new Error(event.text || 'Agent worker failed')
+          case 'final':
+            break
         }
+        if (event.type === 'final') break
       }
+
+      // Wait for the new messages to land in the cache before clearing
+      // the in-flight UI — otherwise the streaming bubble disappears and
+      // the final assistant bubble pops in a beat later, which is what
+      // causes the "blinking rectangle" the user saw.
+      await queryClient.refetchQueries({
+        queryKey: ['messages', projectId, conversationId],
+        type: 'active',
+      })
     } catch (err) {
       if (err.name !== 'AbortError') {
         setSendError(err.message ?? 'Something went wrong. Try again.')
@@ -62,10 +105,24 @@ export function ConversationView() {
       controller.abort()
       setOptimisticUserMsg(null)
       setStreamingText('')
+      setLiveToolCalls([])
+      setLiveStatus(null)
       setIsSending(false)
-      queryClient.invalidateQueries({ queryKey: ['messages', projectId, conversationId] })
     }
-  }, [session, projectId, conversationId, isSending, modelId])
+  }, [session, projectId, conversationId, isSending, modelId, uploadFiles, sendMessage])
+
+  // First-message handoff from ProjectDetail. When a conversation is created
+  // by typing in the project chat-bar, the text is passed via nav state so
+  // we can fire the send+stream here without the user having to retype.
+  const initialFiredRef = useRef(false)
+  useEffect(() => {
+    const initial = location.state?.initialMessage
+    if (!initial || initialFiredRef.current || !session) return
+    initialFiredRef.current = true
+    // Clear nav state so a refresh doesn't re-send the message.
+    navigate(location.pathname, { replace: true, state: {} })
+    handleSend({ text: initial, files: [] })
+  }, [location.state, location.pathname, navigate, session, handleSend])
 
   if (isLoading) {
     return (
@@ -106,6 +163,8 @@ export function ConversationView() {
         optimisticUserMessage={optimisticUserMsg}
         streamingText={streamingText}
         streamingModel={modelId}
+        liveToolCalls={liveToolCalls}
+        liveStatus={liveStatus}
         isStreaming={isSending}
       />
 

@@ -3253,6 +3253,60 @@ p {
   width: fit-content;
 }
 
+/* ── Streaming-time UI: tool chips, status row ── */
+.msg-tool-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.tool-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 99px;
+  font-size: 0.72rem;
+  color: #c9d1d9;
+  font-family: var(--font-ui);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tool-chip-name {
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.tool-chip-args {
+  color: #7d8590;
+  font-size: 0.68rem;
+}
+
+.tool-chip-running { border-color: #30363d; }
+.tool-chip-done    { border-color: #2a4a23; }
+.tool-chip-error   { border-color: #5a2828; color: #f87171; }
+
+.msg-status-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #7d8590;
+  font-size: 0.78rem;
+  padding: 0.3rem 0;
+}
+
+.msg-status-inline {
+  color: #7d8590;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
 /* ── Modals ── */
 .modal-overlay {
   position: fixed;

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText, Sparkles } from 'lucide-react'
+import { FileText, Sparkles, Wrench, Check, AlertCircle, Loader2 } from 'lucide-react'
 import { getModel } from '../../lib/models'
 
 const MD_OPTS = { remarkPlugins: [remarkGfm] }
@@ -21,18 +21,47 @@ function ModelTag({ modelId }) {
   )
 }
 
+function summariseArgs(args) {
+  if (!args || typeof args !== 'object') return ''
+  const parts = []
+  for (const [k, v] of Object.entries(args)) {
+    let s
+    if (typeof v === 'string') s = v.length > 40 ? v.slice(0, 40) + '…' : v
+    else s = JSON.stringify(v)
+    parts.push(`${k}: ${s}`)
+    if (parts.join(', ').length > 80) break
+  }
+  return parts.join(', ')
+}
+
+function ToolCallChip({ tool, args, status }) {
+  const Icon = status === 'done' ? Check
+    : status === 'error' ? AlertCircle
+    : Loader2
+  return (
+    <span className={`tool-chip tool-chip-${status}`}>
+      <Wrench size={11} />
+      <span className="tool-chip-name">{tool}</span>
+      {args && <span className="tool-chip-args">({summariseArgs(args)})</span>}
+      <Icon size={11} className={status === 'running' ? 'spin' : ''} />
+    </span>
+  )
+}
+
 export function MessageList({
   messages = [],
   optimisticUserMessage = null,
   streamingText = '',
   streamingModel = null,
+  liveToolCalls = [],
+  liveStatus = null,
   isStreaming = false,
 }) {
   const bottomRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, streamingText, isStreaming])
+  }, [messages.length, streamingText, isStreaming, liveToolCalls.length])
 
   const isEmpty =
     messages.length === 0 && !optimisticUserMessage && !isStreaming
@@ -45,6 +74,11 @@ export function MessageList({
       </div>
     )
   }
+
+  // Streaming bubble has content when either (a) the model has emitted any
+  // visible text, or (b) any tool calls have happened. Until then we show a
+  // small status line so the user never stares at an empty rectangle.
+  const streamingHasContent = !!streamingText || liveToolCalls.length > 0
 
   return (
     <div className="conv-messages">
@@ -60,10 +94,28 @@ export function MessageList({
 
       {isStreaming && (
         <div className="msg msg-assistant msg-streaming">
-          <div className="msg-bubble">
-            <MarkdownContent>{streamingText}</MarkdownContent>
-            <span className="typing-cursor" />
-          </div>
+          {liveToolCalls.length > 0 && (
+            <div className="msg-tool-strip">
+              {liveToolCalls.map((tc) => (
+                <ToolCallChip key={tc.id} tool={tc.tool} args={tc.args} status={tc.status} />
+              ))}
+            </div>
+          )}
+
+          {streamingHasContent ? (
+            <div className="msg-bubble">
+              {streamingText
+                ? <MarkdownContent>{streamingText}</MarkdownContent>
+                : <span className="msg-status-inline">Working…</span>}
+              <span className="typing-cursor" />
+            </div>
+          ) : (
+            <div className="msg-status-row">
+              <Loader2 size={13} className="spin" />
+              <span>{liveStatus || 'Thinking…'}</span>
+            </div>
+          )}
+
           <ModelTag modelId={streamingModel} />
         </div>
       )}
