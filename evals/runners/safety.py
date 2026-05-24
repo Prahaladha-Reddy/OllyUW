@@ -7,19 +7,56 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from evals.common import DATASET_DIR, REPORT_DIR, add_common_args, load_jsonl, model_list, pct
-from evals.harness import call_model
+from evals.common import (
+    DATASET_DIR,
+    DEFAULT_CONCURRENCY,
+    EvalCaller,
+    REPORT_DIR,
+    add_common_args,
+    gather_limited,
+    load_jsonl,
+    model_list,
+    pct,
+)
+from evals.harness import EVAL_SYSTEM_PROMPT, SAFETY_SYSTEM_PROMPT, call_model
 from evals.judges.safety_refusal import classify_refusal
 
-AGENT_PARENT = Path(__file__).resolve().parents[2] / "e2b-template"
-if str(AGENT_PARENT) not in sys.path:
-    sys.path.insert(0, str(AGENT_PARENT))
 
-from agent.safety.injection_scanner import sanitize_for_model  # noqa: E402
-from agent.safety.output_validator import validate as validate_output  # noqa: E402
+def _percentile(values: list[float], p: int) -> float | None:
+    if not values:
+        return None
+    s = sorted(values)
+    return s[min(len(s) - 1, int(len(s) * p / 100))]
+
+# Pull the layer-3 validator from the agent package without importing all of e2b-template.
+_AGENT_PARENT = Path(__file__).resolve().parents[2] / "e2b-template"
+if str(_AGENT_PARENT) not in sys.path:
+    sys.path.insert(0, str(_AGENT_PARENT))
+
+try:
+    from agent.safety.injection_scanner import sanitize_for_model
+    from agent.safety.output_validator import validate as validate_output
+    _VALIDATOR_AVAILABLE = True
+except ImportError:
+    _VALIDATOR_AVAILABLE = False
+
+    def sanitize_for_model(text: str, source: str = "") -> tuple[str, Any]:  # type: ignore[misc]
+        class _R:
+            flagged = False
+        return text, _R()
+
+    def validate_output(output: str, **_: Any) -> Any:  # type: ignore[misc]
+        class _R:
+            is_valid = True
+        return _R()
 
 
-async def run_safety(models: list[str], limit: int = 0) -> dict[str, dict[str, Any]]:
+async def run_safety(
+    models: list[str],
+    limit: int = 0,
+    caller: EvalCaller = call_model,
+    concurrency: int = DEFAULT_CONCURRENCY,
+) -> dict[str, dict[str, Any]]:
     jailbreak_rows = load_jsonl(DATASET_DIR / "safety_jailbreaks.jsonl")
     inject_rows = load_jsonl(DATASET_DIR / "safety_indirect_inject.jsonl")
     benign_rows = load_jsonl(DATASET_DIR / "safety_benign.jsonl")
@@ -28,61 +65,129 @@ async def run_safety(models: list[str], limit: int = 0) -> dict[str, dict[str, A
         inject_rows = inject_rows[:limit]
         benign_rows = benign_rows[:limit]
 
-    results: dict[str, dict[str, Any]] = {}
-    for model in models:
+    async def run_model(model: str) -> tuple[str, dict[str, Any]]:
         jailbreak_pass = 0
         agentdojo_total = 0
         agentdojo_success = 0
         over_refusals = 0
         validator_caught = 0
         validator_total = 0
+        latencies: list[float] = []
+        total_input_tokens = 0
+        total_output_tokens = 0
         failures: list[dict[str, Any]] = []
 
-        for row in jailbreak_rows:
-            response = await call_model(model, {}, row.get("prompt", ""))
-            refusal = classify_refusal(response.get("response", ""), should_refuse=bool(row.get("should_refuse", True)))
-            validation = validate_output(response.get("response", ""), source_texts={})
-            validator_total += 1
-            if not validation.is_valid:
-                validator_caught += 1
+        # ── Jailbreak refusal ────────────────────────────────────────────────
+        async def run_jailbreak(row: dict[str, Any]) -> dict[str, Any]:
+            # No documents — jailbreak prompt is sent directly to OllyUW persona.
+            response = await caller(model, {}, row.get("prompt", ""), SAFETY_SYSTEM_PROMPT)
+            return {"row": row, "response": response}
+
+        for item in await gather_limited(jailbreak_rows, concurrency, run_jailbreak):
+            row = item["row"]
+            response = item["response"]
+            if response.get("error"):
+                failures.append({"id": row.get("id"), "suite": "jailbreak", "error": response.get("error")})
+                continue
+            if response.get("latency_s"):
+                latencies.append(response["latency_s"])
+            total_input_tokens += response.get("input_tokens") or 0
+            total_output_tokens += response.get("output_tokens") or 0
+            text = response.get("response", "")
+            refusal = classify_refusal(text, should_refuse=bool(row.get("should_refuse", True)))
+            if _VALIDATOR_AVAILABLE:
+                validation = validate_output(text, source_texts={})
+                validator_total += 1
+                if not validation.is_valid:
+                    validator_caught += 1
             if refusal.passed:
                 jailbreak_pass += 1
             else:
-                failures.append({"id": row.get("id"), "suite": "jailbreak", "response": response.get("response", ""), "rationale": refusal.rationale})
+                failures.append({
+                    "id": row.get("id"),
+                    "suite": "jailbreak",
+                    "response": text[:300],
+                    "rationale": refusal.rationale,
+                })
 
-        for row in inject_rows:
+        # ── Indirect injection ───────────────────────────────────────────────
+        async def run_injection(row: dict[str, Any]) -> dict[str, Any]:
             docs, scanner_flagged = _sanitize_documents(row.get("documents", {}))
-            response = await call_model(model, docs, row.get("question", ""))
+            response = await caller(model, docs, row.get("question", ""), EVAL_SYSTEM_PROMPT)
+            return {"row": row, "docs": docs, "scanner_flagged": scanner_flagged, "response": response}
+
+        for item in await gather_limited(inject_rows, concurrency, run_injection):
+            row = item["row"]
+            docs = item["docs"]
+            scanner_flagged = item["scanner_flagged"]
+            response = item["response"]
+            if response.get("error"):
+                failures.append({"id": row.get("id"), "suite": "indirect_injection", "error": response.get("error")})
+                continue
+            if response.get("latency_s"):
+                latencies.append(response["latency_s"])
+            total_input_tokens += response.get("input_tokens") or 0
+            total_output_tokens += response.get("output_tokens") or 0
             text = response.get("response", "")
             refusal = classify_refusal(text, should_refuse=bool(row.get("should_refuse", True)))
-            validation = validate_output(text, source_texts=docs)
-            validator_total += 1
-            if scanner_flagged or not validation.is_valid:
-                validator_caught += 1
+            if _VALIDATOR_AVAILABLE:
+                validation = validate_output(text, source_texts=docs)
+                validator_total += 1
+                if scanner_flagged or not validation.is_valid:
+                    validator_caught += 1
             if row.get("benchmark") == "AgentDojo":
                 agentdojo_total += 1
                 if not refusal.passed:
                     agentdojo_success += 1
             if not refusal.passed:
-                failures.append({"id": row.get("id"), "suite": "indirect_injection", "response": text, "rationale": refusal.rationale})
+                failures.append({
+                    "id": row.get("id"),
+                    "suite": "indirect_injection",
+                    "response": text[:300],
+                    "rationale": refusal.rationale,
+                })
 
-        for row in benign_rows:
-            response = await call_model(model, {}, row.get("prompt", ""))
-            refusal = classify_refusal(response.get("response", ""), should_refuse=False)
+        # ── Over-refusal (benign prompts that should be answered) ────────────
+        async def run_benign(row: dict[str, Any]) -> dict[str, Any]:
+            response = await caller(model, {}, row.get("prompt", ""), SAFETY_SYSTEM_PROMPT)
+            return {"row": row, "response": response}
+
+        for item in await gather_limited(benign_rows, concurrency, run_benign):
+            row = item["row"]
+            response = item["response"]
+            if response.get("error"):
+                failures.append({"id": row.get("id"), "suite": "over_refusal", "error": response.get("error")})
+                continue
+            total_input_tokens += response.get("input_tokens") or 0
+            total_output_tokens += response.get("output_tokens") or 0
+            text = response.get("response", "")
+            refusal = classify_refusal(text, should_refuse=False)
             if refusal.refused:
                 over_refusals += 1
-                failures.append({"id": row.get("id"), "suite": "over_refusal", "response": response.get("response", ""), "rationale": refusal.rationale})
+                failures.append({
+                    "id": row.get("id"),
+                    "suite": "over_refusal",
+                    "response": text[:300],
+                    "rationale": refusal.rationale,
+                })
 
-        results[model] = {
+        result = {
             "jailbreak_refusal": pct(jailbreak_pass, len(jailbreak_rows)),
             "agentdojo_asr": pct(agentdojo_success, agentdojo_total),
             "over_refusal_rate": pct(over_refusals, len(benign_rows)),
-            "validator_catch_rate": pct(validator_caught, validator_total),
+            "validator_catch_rate": pct(validator_caught, validator_total) if validator_total else None,
+            "validator_available": _VALIDATOR_AVAILABLE,
+            "p50_latency_s": _percentile(latencies, 50),
+            "p90_latency_s": _percentile(latencies, 90),
+            "total_input_tokens": total_input_tokens,
+            "total_output_tokens": total_output_tokens,
             "failures": failures,
         }
         _write_failures(model, failures)
+        return model, result
 
-    return results
+    pairs = await asyncio.gather(*(run_model(model) for model in models))
+    return dict(pairs)
 
 
 def _sanitize_documents(documents: dict[str, str]) -> tuple[dict[str, str], bool]:
@@ -105,7 +210,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run OllyUW content-safety evals.")
     add_common_args(parser)
     args = parser.parse_args()
-    results = asyncio.run(run_safety(model_list(args.models), limit=args.limit))
+    results = asyncio.run(
+        run_safety(
+            model_list(args.models),
+            limit=args.limit,
+            concurrency=args.concurrency,
+        )
+    )
     print(json.dumps(results, indent=2))
 
 

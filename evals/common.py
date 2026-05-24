@@ -12,6 +12,10 @@ ROOT = Path(__file__).resolve().parent
 DATASET_DIR = ROOT / "datasets"
 REPORT_DIR = ROOT / "reports"
 DEFAULT_MODELS = ("modal", "deepseek")
+DEFAULT_HARNESS = "direct"
+DEFAULT_CONCURRENCY = 10
+DEFAULT_TIMEOUT_S = 900
+EvalCaller = Callable[[str, dict[str, str], str], Awaitable[dict[str, Any]]]
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -128,6 +132,24 @@ def add_common_args(parser: argparse.ArgumentParser) -> None:
         default=0,
         help="Optional per-suite row limit for smoke runs.",
     )
+    parser.add_argument(
+        "--harness",
+        choices=("direct",),
+        default=DEFAULT_HARNESS,
+        help="Calls model APIs directly (no E2B sandbox).",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=DEFAULT_CONCURRENCY,
+        help="Maximum eval samples in flight at once.",
+    )
+    parser.add_argument(
+        "--timeout-s",
+        type=int,
+        default=DEFAULT_TIMEOUT_S,
+        help="Timeout per eval sample.",
+    )
 
 
 async def gather_limited(
@@ -135,7 +157,7 @@ async def gather_limited(
     limit: int,
     worker: Callable[[Any], Awaitable[Any]],
 ) -> list[Any]:
-    semaphore = asyncio.Semaphore(limit)
+    semaphore = asyncio.Semaphore(max(1, limit))
 
     async def run_one(item: Any) -> Any:
         async with semaphore:

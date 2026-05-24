@@ -1,10 +1,3 @@
-"""
-Application settings.
-
-Flat env-var schema (no nesting) so the existing .env keeps working.
-Grouped accessors expose them by concern: `settings.e2b.api_key`, `settings.supabase.url`, …
-Providers and services only depend on the group they need.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -16,7 +9,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 ROOT = Path(__file__).parent.parent.parent
 
 
-# ── Grouped views (read-only dataclasses, populated from Settings) ──────────
 
 
 @dataclass(frozen=True)
@@ -88,52 +80,40 @@ class ServerGroup:
     frontend_url: str
 
 
-# ── Raw flat settings, loaded from .env ─────────────────────────────────────
-
 
 class Settings(BaseSettings):
-    # E2B
     e2b_api_key: str
     e2b_template_id: str = "base"
     e2b_sandbox_timeout: int = 1200
 
-    # Redis
     redis_url: str
 
-    # Modal (OSS LLM)
     modal_standard_base_url: str = ""
     modal_turbo_base_url: str = ""
     modal_api_key: str = "unused"
     modal_model: str = "google/gemma-4-26B-A4B-it"
 
-    # DeepSeek (frontier LLM)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
     deepseek_model: str = "deepseek-v4-flash"
 
-    # Supabase
     supabase_url: str = ""
     supabase_publishable_key: str = ""
     supabase_secret_key: str = ""
     supabase_bucket: str = "submissions"
 
-    # LangSmith
     langsmith_api_key: str = ""
     langsmith_base_url: str = "https://smith.langchain.com"
     langsmith_tracing: bool = False
 
-    # Mem0 (long-term memory)
     mem0_api_key: str = ""
 
-    # Parallel.ai (web search/research)
     parallel_api_key: str = ""
 
-    # Langfuse (LLM observability)
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_base_url: str = "https://cloud.langfuse.com"
 
-    # Server
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "info"
@@ -147,7 +127,6 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # Grouped accessors (computed lazily; cheap)
 
     @property
     def e2b(self) -> E2BGroup:

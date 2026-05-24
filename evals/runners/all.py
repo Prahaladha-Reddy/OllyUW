@@ -3,22 +3,43 @@ from __future__ import annotations
 import argparse
 import asyncio
 import csv
+import time
 from typing import Any
 
 from evals.common import DATASET_DIR, REPORT_DIR, add_common_args, load_jsonl, model_list
 from evals.datasets.build_seed_data import main as build_seed_data
+from evals.harness import call_model
 from evals.runners.bias import run_bias
 from evals.runners.hallucination import run_hallucination
 from evals.runners.safety import run_safety
 
 
-async def run_all(models: list[str], limit: int = 0) -> dict[str, dict[str, Any]]:
+async def run_all(
+    models: list[str],
+    limit: int = 0,
+    concurrency: int = 10,
+) -> dict[str, dict[str, Any]]:
     _ensure_datasets()
-    hallucination, bias, safety = await asyncio.gather(
-        run_hallucination(models, limit=limit),
-        run_bias(models, limit=limit),
-        run_safety(models, limit=limit),
+    t0 = time.monotonic()
+    hallucination = await run_hallucination(
+        models,
+        limit=limit,
+        caller=call_model,
+        concurrency=concurrency,
     )
+    bias = await run_bias(
+        models,
+        limit=limit,
+        caller=call_model,
+        concurrency=concurrency,
+    )
+    safety = await run_safety(
+        models,
+        limit=limit,
+        caller=call_model,
+        concurrency=concurrency,
+    )
+    elapsed_s = time.monotonic() - t0
     combined: dict[str, dict[str, Any]] = {}
     for model in models:
         combined[model] = {
@@ -26,7 +47,7 @@ async def run_all(models: list[str], limit: int = 0) -> dict[str, dict[str, Any]
             "bias": bias.get(model, {}),
             "safety": safety.get(model, {}),
         }
-    _write_report(combined, models)
+    _write_report(combined, models, concurrency, elapsed_s)
     _write_csv(combined, models)
     return combined
 
@@ -45,11 +66,11 @@ def _ensure_datasets() -> None:
         build_seed_data()
 
 
-def _write_report(results: dict[str, dict[str, Any]], models: list[str]) -> None:
+def _write_report(results: dict[str, dict[str, Any]], models: list[str], concurrency: int, elapsed_s: float = 0.0) -> None:
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     path = REPORT_DIR / "eval_report.md"
     sizes = _dataset_sizes()
-    path.write_text(_render_report(results, models, sizes), encoding="utf-8")
+    path.write_text(_render_report(results, models, sizes, concurrency, elapsed_s), encoding="utf-8")
 
 
 def _dataset_sizes() -> dict[str, int]:
@@ -63,13 +84,20 @@ def _dataset_sizes() -> dict[str, int]:
     }
 
 
-def _render_report(results: dict[str, dict[str, Any]], models: list[str], sizes: dict[str, int]) -> str:
+def _render_report(
+    results: dict[str, dict[str, Any]],
+    models: list[str],
+    sizes: dict[str, int],
+    concurrency: int,
+    elapsed_s: float = 0.0,
+) -> str:
     lines = [
         "# OllyUW Evaluation Report",
         "",
         "## Methodology",
         "",
         "The suite evaluates the same three risks required by the assignment: hallucination, bias, and content safety.",
+        f"Direct API calls to Modal (Gemma) and DeepSeek, concurrency `{concurrency}` per model (both run in parallel).",
         "Citation grounding uses deterministic quote substring checks first. DeepSeek is the configured LLM judge for optional borderline adjudication and refusal classification, keeping the eval single-provider.",
         "All bundled rows are pulled from public benchmark sources by evals.datasets.build_seed_data; no synthetic underwriting packages are generated.",
         "",
@@ -85,7 +113,7 @@ def _render_report(results: dict[str, dict[str, Any]], models: list[str], sizes:
         "",
         "```powershell",
         "$env:PYTHONPATH = (Get-Location).Path",
-        "uv run --project backend python -m evals.runners.all --models modal,deepseek",
+        "uv run --project backend python -m evals.runners.all --models modal,deepseek --concurrency 10",
         "```",
         "",
         "For a local smoke test without model API calls:",
@@ -144,6 +172,75 @@ def _render_report(results: dict[str, dict[str, Any]], models: list[str], sizes:
     lines.extend(
         [
             "",
+            "### Token usage (across all suites)",
+            "| Model | Suite | Input tokens | Output tokens | Total tokens |",
+            "|---|---|---:|---:|---:|",
+        ]
+    )
+    for model in models:
+        h = results[model]["hallucination"]
+        b = results[model]["bias"]
+        s = results[model]["safety"]
+        for suite, r in (("hallucination", h), ("bias", b), ("safety", s)):
+            tin = r.get("total_input_tokens") or 0
+            tout = r.get("total_output_tokens") or 0
+            lines.append(f"| {model} | {suite} | {tin:,} | {tout:,} | {tin + tout:,} |")
+        # per-model total row
+        total_in = sum((r.get("total_input_tokens") or 0) for r in (h, b, s))
+        total_out = sum((r.get("total_output_tokens") or 0) for r in (h, b, s))
+        lines.append(f"| **{model}** | **total** | **{total_in:,}** | **{total_out:,}** | **{total_in + total_out:,}** |")
+
+    lines.extend(
+        [
+            "",
+            "### Latency (per-call p50 / p90, wall-clock total for the full run)",
+            "| Model | Suite | p50 | p90 |",
+            "|---|---|---:|---:|",
+        ]
+    )
+    for model in models:
+        for suite in ("hallucination", "bias", "safety"):
+            r = results[model][suite]
+            lines.append(
+                f"| {model} | {suite} | {_fmt_latency(r.get('p50_latency_s'))} | {_fmt_latency(r.get('p90_latency_s'))} |"
+            )
+    elapsed_str = f"{elapsed_s:.1f}s" if elapsed_s else "N/A"
+    lines.append(f"\nTotal wall-clock time (all suites, both models in parallel): **{elapsed_str}**")
+
+    # ── Cost estimates ───────────────────────────────────────────────────────
+    DEEPSEEK_INPUT_PER_M = 0.14
+    DEEPSEEK_OUTPUT_PER_M = 0.28
+    GPU_COST_PER_HR = 1.95
+
+    lines.extend(
+        [
+            "",
+            "### Estimated cost",
+            "| Model | Basis | Input cost | Output cost | Total |",
+            "|---|---|---:|---:|---:|",
+        ]
+    )
+    for model in models:
+        h = results[model]["hallucination"]
+        b = results[model]["bias"]
+        s = results[model]["safety"]
+        total_in = sum((r.get("total_input_tokens") or 0) for r in (h, b, s))
+        total_out = sum((r.get("total_output_tokens") or 0) for r in (h, b, s))
+        if model == "deepseek":
+            in_cost = total_in / 1_000_000 * DEEPSEEK_INPUT_PER_M
+            out_cost = total_out / 1_000_000 * DEEPSEEK_OUTPUT_PER_M
+            basis = f"{total_in:,} in + {total_out:,} out tokens @ $0.14/$0.28 per 1M"
+            lines.append(f"| {model} | {basis} | ${in_cost:.4f} | ${out_cost:.4f} | **${in_cost + out_cost:.4f}** |")
+        elif model == "modal":
+            gpu_cost = (elapsed_s / 3600) * GPU_COST_PER_HR
+            basis = f"{elapsed_s:.1f}s GPU time @ $1.95/hr (L40S)"
+            lines.append(f"| {model} | {basis} | — | — | **${gpu_cost:.4f}** |")
+        else:
+            lines.append(f"| {model} | N/A (mock/unknown) | — | — | — |")
+
+    lines.extend(
+        [
+            "",
             "## Interpretation",
             "",
             "Use the hallucination table to decide whether the open-source path is accurate enough for extraction and scoring. Use the bias and safety tables to decide whether the frontier model is still needed for final memo reasoning.",
@@ -173,6 +270,8 @@ def _write_csv(results: dict[str, dict[str, Any]], models: list[str]) -> None:
                 "agentdojo_asr",
                 "over_refusal_rate",
                 "validator_catch_rate",
+                "total_input_tokens",
+                "total_output_tokens",
             ],
         )
         writer.writeheader()
@@ -180,6 +279,8 @@ def _write_csv(results: dict[str, dict[str, Any]], models: list[str]) -> None:
             h = results[model]["hallucination"]
             b = results[model]["bias"]
             s = results[model]["safety"]
+            total_in = sum((r.get("total_input_tokens") or 0) for r in (h, b, s))
+            total_out = sum((r.get("total_output_tokens") or 0) for r in (h, b, s))
             writer.writerow(
                 {
                     "model": model,
@@ -195,6 +296,8 @@ def _write_csv(results: dict[str, dict[str, Any]], models: list[str]) -> None:
                     "agentdojo_asr": s.get("agentdojo_asr", 0),
                     "over_refusal_rate": s.get("over_refusal_rate", 0),
                     "validator_catch_rate": s.get("validator_catch_rate", 0),
+                    "total_input_tokens": total_in,
+                    "total_output_tokens": total_out,
                 }
             )
 
@@ -215,12 +318,27 @@ def _fmt_number_or_na(value: Any) -> str:
         return "N/A"
 
 
+def _fmt_latency(value: Any) -> str:
+    if value is None:
+        return "N/A"
+    try:
+        return f"{float(value):.2f}s"
+    except (TypeError, ValueError):
+        return "N/A"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run all OllyUW eval suites and write reports.")
     add_common_args(parser)
     args = parser.parse_args()
     models = model_list(args.models)
-    results = asyncio.run(run_all(models, limit=args.limit))
+    results = asyncio.run(
+        run_all(
+            models,
+            limit=args.limit,
+            concurrency=args.concurrency,
+        )
+    )
     print(f"Wrote {REPORT_DIR / 'eval_report.md'}")
     print(f"Wrote {REPORT_DIR / 'comparison_table.csv'}")
     for model in models:

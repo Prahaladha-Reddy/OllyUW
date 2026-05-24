@@ -13,14 +13,30 @@ From the repository root:
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path
 uv run --project backend python -m evals.datasets.build_seed_data
-uv run --project backend python -m evals.runners.all --models modal,deepseek
+uv run --project backend python -m evals.runners.all --harness e2b-agent --models modal,deepseek --concurrency 10
+```
+
+`--harness e2b-agent` is the reportable system eval: each sample runs through a fresh E2B sandbox, uploaded workspace files, Redis stream transport, `agent.worker`, tool calls, safety scanner, and output validator.
+
+For a one-row system smoke test before the full run:
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+uv run --project backend python -m evals.runners.all --harness e2b-agent --models deepseek --limit 1 --concurrency 1
+```
+
+For a direct model baseline without the E2B agent harness:
+
+```powershell
+$env:PYTHONPATH = (Get-Location).Path
+uv run --project backend python -m evals.runners.all --harness direct --models modal,deepseek --concurrency 10
 ```
 
 For a no-API smoke test:
 
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path
-uv run --project backend python -m evals.runners.all --models mock
+uv run --project backend python -m evals.runners.all --harness direct --models mock
 ```
 
 The report generator writes:
