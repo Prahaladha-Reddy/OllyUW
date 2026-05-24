@@ -1,7 +1,7 @@
-import { workflowSteps } from "../../data/landingContent.js";
-import { NavButton } from "../navigation/NavButton.jsx";
+import { Link } from 'react-router-dom'
+import { workflowSteps } from '../../data/landingContent'
 
-export function WorkflowSection({ onNavigate }) {
+export function WorkflowSection() {
   return (
     <section className="workflow-section section-light">
       <div className="workflow-copy">
@@ -11,14 +11,12 @@ export function WorkflowSection({ onNavigate }) {
       <div className="workflow-list">
         {workflowSteps.map((step, index) => (
           <div key={step}>
-            <span>{String(index + 1).padStart(2, "0")}</span>
+            <span>{String(index + 1).padStart(2, '0')}</span>
             <p>{step}</p>
           </div>
         ))}
       </div>
-      <NavButton className="dark-button" route="auth" onNavigate={onNavigate}>
-        Start review
-      </NavButton>
+      <Link className="dark-button" to="/review">Start review</Link>
     </section>
-  );
+  )
 }

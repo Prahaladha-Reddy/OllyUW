@@ -1,18 +1,10 @@
-import { getPathForRoute } from "../../routing/routes.js";
+import { Link } from 'react-router-dom'
 
-export function Brand({ onNavigate }) {
+export function Brand() {
   return (
-    <a
-      className="brand"
-      href={getPathForRoute("home")}
-      onClick={(event) => {
-        event.preventDefault();
-        onNavigate("home");
-      }}
-      aria-label="OllyUW home"
-    >
+    <Link className="brand" to="/" aria-label="OllyUW home">
       <span className="brand-mark" aria-hidden="true" />
       <span>OllyUW</span>
-    </a>
-  );
+    </Link>
+  )
 }

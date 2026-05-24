@@ -1,15 +1,16 @@
-import { Brand } from "./Brand.jsx";
-import { NavButton } from "../navigation/NavButton.jsx";
+import { Link } from 'react-router-dom'
+import { Brand } from './Brand'
+import { useAuth } from '../../context/AuthContext'
 
-export function Header({ onNavigate, session }) {
+export function Header() {
+  const { session } = useAuth()
+
   return (
     <header className="site-header">
-      <Brand onNavigate={onNavigate} />
+      <Brand />
       {!session && (
-        <NavButton className="pill-button" route="auth" onNavigate={onNavigate}>
-          Start review
-        </NavButton>
+        <Link className="pill-button" to="/review">Start review</Link>
       )}
     </header>
-  );
+  )
 }

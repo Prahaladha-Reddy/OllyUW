@@ -1,27 +1,13 @@
-import { Sidebar } from "./Sidebar.jsx";
+import { Outlet } from 'react-router-dom'
+import { Sidebar } from './Sidebar'
 
-export function WorkspaceLayout({
-  activeConversationId,
-  activeProjectId,
-  children,
-  onCreateConversation,
-  onCreateProject,
-  onNavigate,
-  projects,
-  projectDetails,
-}) {
+export function WorkspaceLayout() {
   return (
-    <section className="workspace-page">
-      <Sidebar
-        activeConversationId={activeConversationId}
-        activeProjectId={activeProjectId}
-        onCreateConversation={onCreateConversation}
-        onCreateProject={onCreateProject}
-        onNavigate={onNavigate}
-        projects={projects}
-        projectDetails={projectDetails}
-      />
-      <div className="workspace-main">{children}</div>
-    </section>
-  );
+    <div className="workspace-shell">
+      <Sidebar />
+      <main className="ws-main">
+        <Outlet />
+      </main>
+    </div>
+  )
 }

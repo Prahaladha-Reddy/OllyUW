@@ -1,219 +1,203 @@
-import { ArrowLeft, Plus } from "lucide-react";
-import { useCallback, useState } from "react";
-import { NavButton } from "../components/navigation/NavButton.jsx";
-import { NewConversationModal } from "../components/workspace/NewConversationModal.jsx";
-import { NewProjectModal } from "../components/workspace/NewProjectModal.jsx";
-import { MessageInput } from "../components/workspace/MessageInput.jsx";
-import { MessageList } from "../components/workspace/MessageList.jsx";
-import { UploadArea } from "../components/workspace/UploadArea.jsx";
-import { WorkspaceLayout } from "../components/workspace/WorkspaceLayout.jsx";
-import {
-  createConversation,
-  createProject,
-  sendConversationMessage,
-  streamConversation,
-  uploadConversationFiles,
-} from "../lib/api.js";
-import { useConversation } from "../hooks/useConversation.js";
-import { useWorkspace } from "../hooks/useWorkspace.js";
+import { useState, useCallback, useRef, useEffect } from 'react'
+import { useParams, Link } from 'react-router-dom'
+import { ChevronRight, Loader2, AlertCircle, Upload, FileText } from 'lucide-react'
+import { useAuth } from '../context/AuthContext'
+import { useProject, useMessages, useUploadConversationFiles, useSendMessage } from '../hooks/queries'
+import { queryClient } from '../lib/queryClient'
+import { streamConversation } from '../lib/api'
+import { MessageList } from '../components/workspace/MessageList'
+import { MessageInput } from '../components/workspace/MessageInput'
 
-export function ConversationView({ conversationId, onNavigate, projectId, session }) {
-  const workspace = useWorkspace(session);
-  const { conversation, messages, error: conversationError, isLoading, refresh } = useConversation(
-    session,
-    projectId,
-    conversationId,
-  );
-  const project = workspace.projectDetails[projectId] || workspace.projects.find((item) => item.id === projectId);
+export function ConversationView() {
+  const { projectId, conversationId } = useParams()
+  const { session } = useAuth()
 
-  const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [conversationProject, setConversationProject] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
-  const [actionError, setActionError] = useState("");
-  const [actionMessage, setActionMessage] = useState("");
+  const { data: project } = useProject(projectId)
+  const { data: messages = [], isLoading, error } = useMessages(projectId, conversationId)
 
-  async function handleCreateProject(payload) {
-    setIsSubmitting(true);
-    setActionError("");
+  const [optimisticUserMsg, setOptimisticUserMsg] = useState(null)
+  const [streamingText, setStreamingText] = useState('')
+  const [isSending, setIsSending] = useState(false)
+  const [sendError, setSendError] = useState(null)
+
+  const abortRef = useRef(null)
+  const uploadFiles = useUploadConversationFiles(projectId, conversationId)
+  const sendMessage = useSendMessage(projectId, conversationId)
+
+  const conversation = project?.conversations?.find((c) => c.id === conversationId)
+  const projectFiles = project?.files ?? []
+
+  // Cleanup: if the component unmounts mid-stream, abort.
+  useEffect(() => () => abortRef.current?.abort(), [])
+
+  const handleSend = useCallback(async ({ text, files }) => {
+    if (isSending) return
+    setIsSending(true)
+    setSendError(null)
+    setOptimisticUserMsg(text)
+    setStreamingText('')
+
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
-      const created = await createProject(session, payload);
-      await workspace.refresh();
-      setProjectModalOpen(false);
-      onNavigate("projectDetail", { projectId: created.id || created.project_id });
-    } catch (error) {
-      setActionError(error.message || "Could not create project.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+      if (files?.length) await uploadFiles.mutateAsync(files)
+      await sendMessage.mutateAsync(text)
 
-  async function handleCreateConversation(payload) {
-    const targetProject = conversationProject || project;
-    if (!targetProject) return;
-
-    setIsSubmitting(true);
-    setActionError("");
-    try {
-      const created = await createConversation(session, targetProject.id, payload);
-      await workspace.refresh();
-      setConversationProject(null);
-      onNavigate("conversation", {
-        conversationId: created.id || created.conversation_id,
-        projectId: targetProject.id,
-      });
-    } catch (error) {
-      setActionError(error.message || "Could not create conversation.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleUpload(filesToUpload) {
-    setIsUploading(true);
-    setActionError("");
-    setActionMessage("");
-    try {
-      // Use conversation-scoped upload so files are pushed to the live sandbox
-      await uploadConversationFiles(session, projectId, conversationId, filesToUpload);
-      await workspace.refresh();
-      setActionMessage(`${filesToUpload.length} file${filesToUpload.length === 1 ? "" : "s"} added.`);
-    } catch (error) {
-      setActionError(error.message || "Upload failed.");
-    } finally {
-      setIsUploading(false);
-    }
-  }
-
-  const handleSend = useCallback(
-    async (text) => {
-      setIsSending(true);
-      setStreamingText("");
-      setActionError("");
-
-      try {
-        // 1. Persist user message and enqueue to agent
-        await sendConversationMessage(session, projectId, conversationId, text);
-
-        // Optimistically refresh so user message shows immediately
-        await refresh();
-
-        // 2. Open SSE stream and accumulate agent response
-        let finalReceived = false;
-        for await (const event of streamConversation(session, projectId, conversationId)) {
-          if (event.type === "model_delta") {
-            setStreamingText((prev) => prev + (event.text || ""));
-          } else if (event.type === "final") {
-            finalReceived = true;
-            setStreamingText("");
-            // Reload from DB — agent's final answer is now persisted
-            await refresh();
-            break;
-          } else if (event.type === "sse_heartbeat" || event.type === "stream_connected") {
-            // no-op
-          }
+      for await (const event of streamConversation(
+        session, projectId, conversationId, controller.signal,
+      )) {
+        if (event.type === 'text_delta') {
+          setStreamingText((prev) => prev + (event.text ?? ''))
+        } else if (event.type === 'final') {
+          break
         }
-
-        // Fallback: if stream closed without a final event
-        if (!finalReceived) {
-          setStreamingText("");
-          await refresh();
-        }
-      } catch (error) {
-        setActionError(error.message || "Could not send message.");
-        setStreamingText("");
-      } finally {
-        setIsSending(false);
       }
-    },
-    [session, projectId, conversationId, refresh],
-  );
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        setSendError(err.message ?? 'Something went wrong. Try again.')
+      }
+    } finally {
+      controller.abort()
+      setOptimisticUserMsg(null)
+      setStreamingText('')
+      setIsSending(false)
+      queryClient.invalidateQueries({ queryKey: ['messages', projectId, conversationId] })
+    }
+  }, [session, projectId, conversationId, isSending])
+
+  if (isLoading) {
+    return (
+      <div className="ws-loading">
+        <Loader2 size={18} className="spin" /> Loading…
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="ws-loading" style={{ flexDirection: 'column', gap: '0.5rem' }}>
+        <AlertCircle size={20} />
+        <span>Could not load conversation.</span>
+        <Link to={`/projects/${projectId}`} style={{ color: '#7d8590', fontSize: '0.875rem' }}>
+          Back to project
+        </Link>
+      </div>
+    )
+  }
 
   return (
-    <>
-      <WorkspaceLayout
-        activeConversationId={conversationId}
-        activeProjectId={projectId}
-        onCreateConversation={setConversationProject}
-        onCreateProject={() => setProjectModalOpen(true)}
-        onNavigate={onNavigate}
-        projectDetails={workspace.projectDetails}
-        projects={workspace.projects}
-      >
-        <div className="workspace-header conversation-header">
-          <div>
-            <p className="eyebrow">{project?.name ? `Projects / ${project.name}` : "Conversation"}</p>
-            <h1>{conversation?.title || "Conversation"}</h1>
-            <p>Ask questions against the uploaded evidence. Answers stay attached to this project record.</p>
-          </div>
-          <button className="pill-button" type="button" onClick={() => setConversationProject(project)}>
-            <Plus size={18} />
-            New Conversation
-          </button>
+    <div className="conv-view">
+      {/* Header breadcrumb */}
+      <div className="conv-header">
+        <Link to="/projects" className="conv-header-breadcrumb">Projects</Link>
+        <ChevronRight size={12} style={{ color: '#30363d' }} />
+        <Link to={`/projects/${projectId}`} className="conv-header-breadcrumb">
+          {project?.name ?? '…'}
+        </Link>
+        <ChevronRight size={12} style={{ color: '#30363d' }} />
+        <span className="conv-header-title">{conversation?.title ?? 'Conversation'}</span>
+      </div>
+
+      {/* Error banner */}
+      {sendError && (
+        <div style={{
+          padding: '0.5rem 1.5rem',
+          background: '#2d1515',
+          color: '#f85149',
+          fontSize: '0.8125rem',
+          fontFamily: 'var(--font-ui)',
+          flexShrink: 0,
+        }}>
+          {sendError}
         </div>
-
-        {actionError && <p className="workspace-alert">{actionError}</p>}
-        {workspace.error && <p className="workspace-alert">{workspace.error}</p>}
-        {conversationError && <p className="workspace-alert">{conversationError}</p>}
-        {actionMessage && <p className="workspace-success">{actionMessage}</p>}
-
-        {isLoading && (
-          <div className="state-panel">
-            <h2>Loading conversation</h2>
-            <p>Opening the message history.</p>
-          </div>
-        )}
-
-        {!isLoading && (
-          <section className="workspace-section conversation-panel">
-            <div className="workspace-section-heading">
-              <div>
-                <h2>Messages</h2>
-                <p>{messages.length ? `${messages.length} messages` : "No messages yet"}</p>
-              </div>
-            </div>
-            <MessageList messages={messages} streamingText={streamingText} />
-            <MessageInput disabled={isSending || !conversation} onSend={handleSend} />
-            {isSending && !streamingText && <p className="workspace-note">Agent is thinking...</p>}
-          </section>
-        )}
-
-        <section className="workspace-section">
-          <div className="workspace-section-heading">
-            <div>
-              <h2>Add files</h2>
-              <p>Files added here are available to this conversation immediately.</p>
-            </div>
-          </div>
-          <UploadArea disabled={isUploading} onUpload={handleUpload} />
-        </section>
-
-        <NavButton className="workspace-back-link" route="projectDetail" params={{ projectId }} onNavigate={onNavigate}>
-          <ArrowLeft size={17} />
-          Back to Project
-        </NavButton>
-      </WorkspaceLayout>
-
-      {projectModalOpen && (
-        <NewProjectModal
-          existingProjects={workspace.projects}
-          isSubmitting={isSubmitting}
-          onClose={() => setProjectModalOpen(false)}
-          onSubmit={handleCreateProject}
-          serverError={actionError}
-        />
       )}
-      {conversationProject && (
-        <NewConversationModal
-          isSubmitting={isSubmitting}
-          onClose={() => setConversationProject(null)}
-          onSubmit={handleCreateConversation}
-          project={conversationProject}
-          serverError={actionError}
-        />
+
+      {/* Messages */}
+      <MessageList
+        messages={messages}
+        optimisticUserMessage={optimisticUserMsg}
+        streamingText={streamingText}
+        isStreaming={isSending}
+      />
+
+      {/* File upload strip */}
+      <ConvFileStrip
+        projectId={projectId}
+        conversationId={conversationId}
+        projectFiles={projectFiles}
+      />
+
+      {/* Input */}
+      <MessageInput disabled={isSending} onSend={handleSend} />
+    </div>
+  )
+}
+
+function ConvFileStrip({ projectId, conversationId, projectFiles }) {
+  const [open, setOpen] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef(null)
+  const uploadFiles = useUploadConversationFiles(projectId, conversationId)
+
+  async function handleUpload(fileList) {
+    if (!fileList.length) return
+    await uploadFiles.mutateAsync(Array.from(fileList))
+  }
+
+  return (
+    <div className="conv-upload-strip">
+      <div className="conv-upload-header" onClick={() => setOpen((o) => !o)}>
+        <span className="conv-upload-label">
+          <FileText size={12} />
+          Files ({projectFiles.length})
+        </span>
+        <span className="conv-upload-toggle">{open ? '▲ hide' : '▼ show'}</span>
+      </div>
+
+      {open && (
+        <div className="conv-upload-body">
+          {projectFiles.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.5rem' }}>
+              {projectFiles.map((f) => (
+                <span key={f.id} className="msg-citation">
+                  <FileText size={10} />
+                  {f.original_name}
+                </span>
+              ))}
+            </div>
+          )}
+          <div
+            className={`conv-upload-zone ${isDragOver ? 'is-drag-over' : ''}`}
+            onDrop={(e) => { e.preventDefault(); setIsDragOver(false); handleUpload(e.dataTransfer.files) }}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+            onDragLeave={() => setIsDragOver(false)}
+            onClick={() => fileInputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+          >
+            <Upload size={13} />
+            <span>
+              {uploadFiles.isPending
+                ? 'Uploading…'
+                : 'Add files to this project (drop or click)'}
+            </span>
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(e) => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = '' }}
+          />
+          {uploadFiles.isError && (
+            <p style={{ margin: '0.375rem 0 0', fontSize: '0.75rem', color: '#f85149', fontFamily: 'var(--font-ui)' }}>
+              {uploadFiles.error?.message ?? 'Upload failed.'}
+            </p>
+          )}
+        </div>
       )}
-    </>
-  );
+    </div>
+  )
 }

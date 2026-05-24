@@ -1,114 +1,44 @@
-import { useEffect, useState } from "react";
-import { Header } from "./components/layout/Header.jsx";
-import { AuthPage } from "./pages/AuthPage.jsx";
-import { ConversationView } from "./pages/ConversationView.jsx";
-import { HomePage } from "./pages/HomePage.jsx";
-import { ProjectDetail } from "./pages/ProjectDetail.jsx";
-import { ProjectsDashboard } from "./pages/ProjectsDashboard.jsx";
-import { ScoringPage } from "./pages/ScoringPage.jsx";
-import { supabase } from "./lib/supabase.js";
-import { getPathForRoute, getRouteFromPath } from "./routing/routes.js";
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { useAuth } from './context/AuthContext'
+import { PublicLayout } from './components/layout/PublicLayout'
+import { HomePage } from './pages/HomePage'
+import { AuthPage } from './pages/AuthPage'
+import { ScoringPage } from './pages/ScoringPage'
+import { WorkspaceLayout } from './components/workspace/WorkspaceLayout'
+import { WorkspaceWelcome } from './pages/WorkspaceWelcome'
+import { ProjectDetail } from './pages/ProjectDetail'
+import { ConversationView } from './pages/ConversationView'
 
-const protectedRoutes = new Set(["projects", "projectDetail", "conversation"]);
+function ProtectedRoute({ children }) {
+  const { session, loading } = useAuth()
+  if (loading) return <div className="ws-loading">Loading…</div>
+  if (!session) return <Navigate to="/review" replace />
+  return children
+}
 
 export default function App() {
-  const [currentRoute, setCurrentRoute] = useState(() => getRouteFromPath(window.location.pathname));
-  const [authLoading, setAuthLoading] = useState(true);
-  const [session, setSession] = useState(null);
-  const route = currentRoute.id;
-  const params = currentRoute.params;
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setAuthLoading(false);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-      setSession(nextSession);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  useEffect(() => {
-    function handlePopState() {
-      setCurrentRoute(getRouteFromPath(window.location.pathname));
-      window.scrollTo({ top: 0, behavior: "auto" });
-    }
-
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-
-    if (protectedRoutes.has(route) && !session) {
-      navigate("auth", {}, { replace: true });
-      return;
-    }
-
-    if (route === "auth" && session) {
-      navigate("projects", {}, { replace: true });
-    }
-  }, [authLoading, route, session]);
-
-  function navigate(nextRoute, nextParams = {}, options = {}) {
-    const nextPath = getPathForRoute(nextRoute, nextParams);
-
-    if (window.location.pathname !== nextPath) {
-      if (options.replace) {
-        window.history.replaceState({}, "", nextPath);
-      } else {
-        window.history.pushState({}, "", nextPath);
-      }
-    }
-
-    setCurrentRoute(getRouteFromPath(nextPath));
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function handleSignOut() {
-    supabase.auth.signOut().then(() => navigate("home", {}, { replace: true }));
-  }
-
-  const isProtectedRoute = protectedRoutes.has(route);
-  const isProtectedLoading = authLoading && isProtectedRoute;
-  const isProtectedBlocked = !authLoading && isProtectedRoute && !session;
-
   return (
-    <>
-      <Header onNavigate={navigate} session={session} onSignOut={handleSignOut} />
-      <main>
-        {isProtectedLoading && (
-          <section className="page section-light state-page">
-            <div className="state-panel">
-              <h2>Loading workspace</h2>
-              <p>Checking your session.</p>
-            </div>
-          </section>
-        )}
-        {route === "scoring" && <ScoringPage onNavigate={navigate} />}
-        {route === "home" && <HomePage onNavigate={navigate} />}
-        {route === "auth" && <AuthPage session={session} onNavigate={navigate} />}
-        {!isProtectedLoading && !isProtectedBlocked && route === "projects" && (
-          <ProjectsDashboard session={session} onNavigate={navigate} />
-        )}
-        {!isProtectedLoading && !isProtectedBlocked && route === "projectDetail" && (
-          <ProjectDetail projectId={params.projectId} session={session} onNavigate={navigate} />
-        )}
-        {!isProtectedLoading && !isProtectedBlocked && route === "conversation" && (
-          <ConversationView
-            conversationId={params.conversationId}
-            projectId={params.projectId}
-            session={session}
-            onNavigate={navigate}
-          />
-        )}
-      </main>
-    </>
-  );
+    <Routes>
+      <Route element={<PublicLayout />}>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/review" element={<AuthPage />} />
+        <Route path="/scoring" element={<ScoringPage />} />
+      </Route>
+
+      <Route
+        path="/projects"
+        element={
+          <ProtectedRoute>
+            <WorkspaceLayout />
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<WorkspaceWelcome />} />
+        <Route path=":projectId" element={<ProjectDetail />} />
+        <Route path=":projectId/conversations/:conversationId" element={<ConversationView />} />
+      </Route>
+
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  )
 }

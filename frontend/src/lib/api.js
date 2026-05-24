@@ -111,13 +111,17 @@ export function uploadConversationFiles(session, projectId, conversationId, file
   });
 }
 
-// SSE stream using fetch (EventSource can't set Authorization header)
-export async function* streamConversation(session, projectId, conversationId) {
+// SSE stream using fetch (EventSource can't set Authorization header).
+// Pass an AbortSignal so the caller can close the connection on `final` —
+// otherwise the backend keeps the Redis subscription open and any later
+// `final` event published on that session will be persisted twice.
+export async function* streamConversation(session, projectId, conversationId, signal) {
   const token = await getAccessToken(session);
   const url = `${API_BASE_URL}/projects/${projectId}/conversations/${conversationId}/stream`;
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
 
   if (!response.ok) {
@@ -129,24 +133,30 @@ export async function* streamConversation(session, projectId, conversationId) {
   const decoder = new TextDecoder();
   let buffer = "";
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop(); // keep incomplete trailing line
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop(); // keep incomplete trailing line
 
-    for (const line of lines) {
-      if (line.startsWith("data: ")) {
-        const raw = line.slice(6).trim();
-        if (!raw) continue;
-        try {
-          yield JSON.parse(raw);
-        } catch {
-          // skip malformed SSE lines
+      for (const line of lines) {
+        if (line.startsWith("data: ")) {
+          const raw = line.slice(6).trim();
+          if (!raw) continue;
+          try {
+            yield JSON.parse(raw);
+          } catch {
+            // skip malformed SSE lines
+          }
         }
       }
     }
+  } finally {
+    // Ensure the underlying connection is closed even when the consumer
+    // breaks out of the loop early (e.g. on `final`).
+    try { await reader.cancel(); } catch {}
   }
 }

@@ -1,7 +1,7 @@
-import { RadarChart } from "./RadarChart.jsx";
-import { NavButton } from "../navigation/NavButton.jsx";
+import { Link } from 'react-router-dom'
+import { RadarChart } from './RadarChart'
 
-export function RiskRadarSection({ onNavigate }) {
+export function RiskRadarSection() {
   return (
     <section className="risk-section section-cream">
       <div className="split-layout">
@@ -28,9 +28,7 @@ export function RiskRadarSection({ onNavigate }) {
               <span>source-backed findings</span>
             </div>
           </div>
-          <NavButton className="text-link-button" route="scoring" onNavigate={onNavigate}>
-            Read more
-          </NavButton>
+          <Link className="text-link-button" to="/scoring">Read more</Link>
         </div>
 
         <div className="radar-panel" aria-label="Sample 12 dimension risk scores">
@@ -38,5 +36,5 @@ export function RiskRadarSection({ onNavigate }) {
         </div>
       </div>
     </section>
-  );
+  )
 }

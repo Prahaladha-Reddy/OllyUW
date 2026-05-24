@@ -98,6 +98,57 @@ def _save_state(messages: list[dict[str, str]]) -> None:
     )
 
 
+# ── Streaming JSON text-field extractor ─────────────────────────────────────
+#
+# The LLM is asked to emit a single JSON object — e.g.
+#   {"type":"final","text":"Hello\n**Bold**"}
+# It arrives token-by-token. We don't want the frontend to know that wire
+# format, so we extract the value of the `text` field incrementally on the
+# server and only publish clean text deltas. Returns None until the `text`
+# key has opened. Handles JSON escape sequences. Robust to incomplete input.
+
+def _extract_text_field(raw: str) -> str | None:
+    key_idx = raw.find('"text"')
+    if key_idx == -1:
+        return None
+
+    i = key_idx + len('"text"')
+    while i < len(raw) and raw[i].isspace():
+        i += 1
+    if i >= len(raw) or raw[i] != ":":
+        return None
+    i += 1
+    while i < len(raw) and raw[i].isspace():
+        i += 1
+    if i >= len(raw) or raw[i] != '"':
+        return None
+    i += 1  # now at first char of value
+
+    escapes = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f"}
+    out: list[str] = []
+    while i < len(raw):
+        ch = raw[i]
+        if ch == "\\":
+            if i + 1 >= len(raw):
+                break  # mid-escape, wait for more
+            nxt = raw[i + 1]
+            if nxt == "u":
+                if i + 5 >= len(raw):
+                    break  # mid-unicode
+                out.append(chr(int(raw[i + 2 : i + 6], 16)))
+                i += 6
+                continue
+            out.append(escapes.get(nxt, nxt))
+            i += 2
+        elif ch == '"':
+            break  # end of value
+        else:
+            out.append(ch)
+            i += 1
+
+    return "".join(out)
+
+
 # ── LLM ─────────────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = (
@@ -141,16 +192,19 @@ def _call_model(messages: list[dict[str, str]]) -> dict[str, Any]:
 
     _publish({"type": "model_start"})
     parts: list[str] = []
+    emitted = ""  # text already published as text_delta
     for chunk in llm.stream(chat_msgs):
         text = str(chunk.content)
         if not text:
             continue
         parts.append(text)
-        _publish({"type": "model_delta", "text": text})
+        current = _extract_text_field("".join(parts))
+        if current is not None and len(current) > len(emitted):
+            _publish({"type": "text_delta", "text": current[len(emitted):]})
+            emitted = current
 
     raw = "".join(parts).strip()
     _publish({"type": "model_end"})
-    _publish({"type": "model_raw", "text": raw})
 
     try:
         return json.loads(raw)

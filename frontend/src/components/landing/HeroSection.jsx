@@ -1,6 +1,6 @@
-import { NavButton } from "../navigation/NavButton.jsx";
+import { Link } from 'react-router-dom'
 
-export function HeroSection({ onNavigate }) {
+export function HeroSection() {
   return (
     <section className="hero section-dark">
       <div className="hero-inner">
@@ -11,9 +11,9 @@ export function HeroSection({ onNavigate }) {
           cross-checking. OllyUW reads the evidence package, finds contradictions, scores the 12 AI
           liability dimensions, drafts the memo, and keeps answering from the cited source file.
         </p>
-        <NavButton className="pill-button hero-button" route="auth" onNavigate={onNavigate}>
+        <Link className="pill-button hero-button" to="/review">
           Start review
-        </NavButton>
+        </Link>
       </div>
 
       <div className="hero-preview" aria-label="Underwriting memo preview">
@@ -33,5 +33,5 @@ export function HeroSection({ onNavigate }) {
         </div>
       </div>
     </section>
-  );
+  )
 }

@@ -211,8 +211,12 @@ class SessionService:
             "LANGCHAIN_TRACING_V2": str(settings.langsmith.tracing).lower(),
         }
 
-        sandbox, sandbox_id = await asyncio.to_thread(e2b_provider.create_sandbox, envs)
+        sandbox, sandbox_id = await asyncio.to_thread(e2b_provider.create_sandbox)
         logger.info("started sandbox %s for conversation %s", sandbox_id, conversation_id)
+
+        # Upload worker.py + tools.py to /home/user/ — agent dependencies are
+        # already baked into the template, so this is just the code itself.
+        await asyncio.to_thread(e2b_provider.upload_agent_code, sandbox)
 
         # Materialise project files into the sandbox workspace (raw bytes — no conversion)
         file_rows = await asyncio.to_thread(
@@ -228,6 +232,10 @@ class SessionService:
                 logger.warning("could not download %s: %s", row["storage_path"], exc)
         if workspace:
             await asyncio.to_thread(e2b_provider.upload_raw_files, sandbox, workspace)
+
+        # Launch the worker — it'll connect to Redis and start consuming messages.
+        await asyncio.to_thread(e2b_provider.start_worker, sandbox, envs)
+        logger.info("worker launched in sandbox %s", sandbox_id)
 
         await e2b_provider.register(session_id, sandbox)
         await asyncio.to_thread(

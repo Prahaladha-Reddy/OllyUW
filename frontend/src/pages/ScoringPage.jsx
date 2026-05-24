@@ -1,7 +1,7 @@
-import { evidenceDocumentExamples } from "../data/landingContent.js";
-import { riskDimensions } from "../data/riskDimensions.js";
+import { evidenceDocumentExamples } from '../data/landingContent'
+import { riskDimensions } from '../data/riskDimensions'
 
-export function ScoringPage({ onNavigate }) {
+export function ScoringPage() {
   return (
     <section className="page scoring-page section-light" aria-label="OllyUW scoring explainer">
       <div className="scoring-hero">
@@ -71,5 +71,5 @@ export function ScoringPage({ onNavigate }) {
         ))}
       </div>
     </section>
-  );
+  )
 }

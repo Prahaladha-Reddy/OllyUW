@@ -1,41 +1,39 @@
-import { useState } from "react";
-import { Modal } from "./Modal.jsx";
+import { useState } from 'react'
 
-export function NewConversationModal({ isSubmitting, onClose, onSubmit, project, serverError }) {
-  const [error, setError] = useState("");
+export function NewConversationModal({ onConfirm, onCancel, loading }) {
+  const [title, setTitle] = useState('')
 
-  function handleSubmit(event) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const title = String(form.get("title") || "").trim();
-
-    if (title.length < 3) {
-      setError("Conversation title must be at least 3 characters.");
-      return;
-    }
-
-    setError("");
-    onSubmit({ title });
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (title.trim()) onConfirm({ title: title.trim() })
   }
 
   return (
-    <Modal title="Start New Conversation" onClose={onClose}>
-      <form className="modal-form" onSubmit={handleSubmit}>
-        <p className="modal-context">{project?.name}</p>
-        <label htmlFor="conversation-title">Conversation Title</label>
-        <input id="conversation-title" name="title" maxLength={100} placeholder="Liability Analysis" required />
-
-        {(error || serverError) && <p className="modal-error">{error || serverError}</p>}
-
-        <div className="modal-actions">
-          <button className="secondary-button" type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="pill-button" type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Creating..." : "Create"}
-          </button>
-        </div>
-      </form>
-    </Modal>
-  );
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-title">New conversation</h2>
+        <form onSubmit={handleSubmit}>
+          <div className="modal-field">
+            <label className="modal-label" htmlFor="conv-title">Title</label>
+            <input
+              id="conv-title"
+              className="modal-input"
+              type="text"
+              placeholder="Liability analysis"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="modal-cancel" onClick={onCancel}>Cancel</button>
+            <button type="submit" className="modal-submit" disabled={loading || !title.trim()}>
+              {loading ? 'Creating…' : 'Start'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
 }

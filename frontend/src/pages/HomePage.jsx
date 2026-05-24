@@ -1,17 +1,17 @@
-import { AdvantageSection } from "../components/landing/AdvantageSection.jsx";
-import { HeroSection } from "../components/landing/HeroSection.jsx";
-import { ManualComparisonSection } from "../components/landing/ManualComparisonSection.jsx";
-import { RiskRadarSection } from "../components/landing/RiskRadarSection.jsx";
-import { WorkflowSection } from "../components/landing/WorkflowSection.jsx";
+import { AdvantageSection } from '../components/landing/AdvantageSection'
+import { HeroSection } from '../components/landing/HeroSection'
+import { ManualComparisonSection } from '../components/landing/ManualComparisonSection'
+import { RiskRadarSection } from '../components/landing/RiskRadarSection'
+import { WorkflowSection } from '../components/landing/WorkflowSection'
 
-export function HomePage({ onNavigate }) {
+export function HomePage() {
   return (
     <section className="page page-home" aria-label="OllyUW overview">
-      <HeroSection onNavigate={onNavigate} />
+      <HeroSection />
       <ManualComparisonSection />
-      <RiskRadarSection onNavigate={onNavigate} />
+      <RiskRadarSection />
       <AdvantageSection />
-      <WorkflowSection onNavigate={onNavigate} />
+      <WorkflowSection />
     </section>
-  );
+  )
 }

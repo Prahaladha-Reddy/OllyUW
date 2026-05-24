@@ -5,10 +5,8 @@ import { NewProjectModal } from "../components/workspace/NewProjectModal.jsx";
 import { ProjectCard } from "../components/workspace/ProjectCard.jsx";
 import { WorkspaceLayout } from "../components/workspace/WorkspaceLayout.jsx";
 import { createConversation, createProject, deleteProject } from "../lib/api.js";
-import { useWorkspace } from "../hooks/useWorkspace.js";
 
-export function ProjectsDashboard({ onNavigate, session }) {
-  const workspace = useWorkspace(session);
+export function ProjectsDashboard({ onNavigate, session, workspace }) {
   const [projectModalOpen, setProjectModalOpen] = useState(false);
   const [conversationProject, setConversationProject] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -73,6 +71,7 @@ export function ProjectsDashboard({ onNavigate, session }) {
       <WorkspaceLayout
         onCreateConversation={setConversationProject}
         onCreateProject={() => setProjectModalOpen(true)}
+        onLoadProjectDetail={workspace.loadProjectDetail}
         onNavigate={onNavigate}
         projectDetails={workspace.projectDetails}
         projects={workspace.projects}

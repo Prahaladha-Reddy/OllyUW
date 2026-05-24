@@ -1,266 +1,229 @@
-import { ArrowLeft, MessageSquare, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { NavButton } from "../components/navigation/NavButton.jsx";
-import { ConversationList } from "../components/workspace/ConversationList.jsx";
-import { FileList } from "../components/workspace/FileList.jsx";
-import { NewConversationModal } from "../components/workspace/NewConversationModal.jsx";
-import { NewProjectModal } from "../components/workspace/NewProjectModal.jsx";
-import { UploadArea } from "../components/workspace/UploadArea.jsx";
-import { WorkspaceLayout } from "../components/workspace/WorkspaceLayout.jsx";
+import { useState, useCallback, useRef } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { Plus, Trash2, FileText, Loader2, AlertCircle, Upload } from 'lucide-react'
 import {
-  createConversation,
-  createProject,
-  deleteConversation,
-  deleteProject,
-  deleteProjectFile,
-  uploadProjectFiles,
-} from "../lib/api.js";
-import { useWorkspace } from "../hooks/useWorkspace.js";
-import { formatDate } from "../utils/format.js";
+  useProject,
+  useDeleteProject,
+  useUploadProjectFiles,
+  useDeleteProjectFile,
+  useCreateConversation,
+  useDeleteConversation,
+} from '../hooks/queries'
+import { NewConversationModal } from '../components/workspace/NewConversationModal'
+import { formatDate } from '../utils/format'
 
-export function ProjectDetail({ onNavigate, projectId, session }) {
-  const workspace = useWorkspace(session);
-  const project = workspace.projectDetails[projectId] || workspace.projects.find((item) => item.id === projectId);
-  const files = project?.files || [];
-  const conversations = project?.conversations || [];
-  const [projectModalOpen, setProjectModalOpen] = useState(false);
-  const [conversationProject, setConversationProject] = useState(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const [actionMessage, setActionMessage] = useState("");
+export function ProjectDetail() {
+  const { projectId } = useParams()
+  const navigate = useNavigate()
+  const { data: project, isLoading, error } = useProject(projectId)
+  const [showNewConv, setShowNewConv] = useState(false)
+  const [isDragOver, setIsDragOver] = useState(false)
+  const fileInputRef = useRef(null)
 
-  async function handleCreateProject(payload) {
-    setIsSubmitting(true);
-    setActionError("");
+  const deleteProject = useDeleteProject()
+  const uploadFiles = useUploadProjectFiles(projectId)
+  const deleteFile = useDeleteProjectFile(projectId)
+  const createConversation = useCreateConversation(projectId)
+  const deleteConversation = useDeleteConversation(projectId)
 
-    try {
-      const created = await createProject(session, payload);
-      await workspace.refresh();
-      setProjectModalOpen(false);
-      onNavigate("projectDetail", { projectId: created.id || created.project_id });
-    } catch (error) {
-      setActionError(error.message || "Could not create project.");
-    } finally {
-      setIsSubmitting(false);
-    }
+  const files = project?.files ?? []
+  const conversations = project?.conversations ?? []
+
+  async function handleUpload(fileList) {
+    if (!fileList.length) return
+    await uploadFiles.mutateAsync(Array.from(fileList))
   }
 
-  async function handleCreateConversation(payload) {
-    const targetProject = conversationProject || project;
-    if (!targetProject) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setActionError("");
-
-    try {
-      const created = await createConversation(session, targetProject.id, payload);
-      await workspace.refresh();
-      setConversationProject(null);
-      onNavigate("conversation", {
-        conversationId: created.id || created.conversation_id,
-        projectId: targetProject.id,
-      });
-    } catch (error) {
-      setActionError(error.message || "Could not create conversation.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
-
-  async function handleUpload(filesToUpload) {
-    setIsUploading(true);
-    setActionError("");
-    setActionMessage("");
-
-    try {
-      await uploadProjectFiles(session, projectId, filesToUpload);
-      await workspace.refresh();
-      setActionMessage(`${filesToUpload.length} file${filesToUpload.length === 1 ? "" : "s"} uploaded.`);
-    } catch (error) {
-      setActionError(error.message || "Upload failed.");
-    } finally {
-      setIsUploading(false);
-    }
-  }
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    if (e.dataTransfer.files.length) handleUpload(e.dataTransfer.files)
+  }, [projectId])
 
   async function handleDeleteFile(file) {
-    const confirmed = window.confirm(`Delete "${file.original_name}"?`);
-    if (!confirmed) {
-      return;
-    }
-
-    setActionError("");
-    try {
-      await deleteProjectFile(session, projectId, file.id);
-      await workspace.refresh();
-    } catch (error) {
-      setActionError(error.message || "Could not delete file.");
-    }
+    if (!window.confirm(`Delete "${file.original_name}"?`)) return
+    await deleteFile.mutateAsync(file.id)
   }
 
-  async function handleDeleteConversation(conversation) {
-    const confirmed = window.confirm(`Delete "${conversation.title}"?`);
-    if (!confirmed) {
-      return;
-    }
-
-    setActionError("");
-    try {
-      await deleteConversation(session, projectId, conversation.id);
-      await workspace.refresh();
-    } catch (error) {
-      setActionError(error.message || "Could not delete conversation.");
-    }
+  async function handleDeleteConversation(conv) {
+    if (!window.confirm(`Delete "${conv.title}"?`)) return
+    await deleteConversation.mutateAsync(conv.id)
   }
 
   async function handleDeleteProject() {
-    if (!project) {
-      return;
-    }
-
-    const confirmed = window.confirm(`Delete "${project.name}" and all files?`);
-    if (!confirmed) {
-      return;
-    }
-
-    setActionError("");
-    try {
-      await deleteProject(session, projectId);
-      onNavigate("projects", {}, { replace: true });
-    } catch (error) {
-      setActionError(error.message || "Could not delete project.");
-    }
+    if (!window.confirm(`Delete "${project.name}" and all its data?`)) return
+    await deleteProject.mutateAsync(projectId)
+    navigate('/projects', { replace: true })
   }
 
-  const loadingProject = workspace.isLoading && !project;
+  async function handleCreateConversation({ title }) {
+    const result = await createConversation.mutateAsync({ title })
+    const id = result.id ?? result.conversation_id
+    setShowNewConv(false)
+    navigate(`/projects/${projectId}/conversations/${id}`)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="ws-loading">
+        <Loader2 size={18} className="spin" /> Loading project…
+      </div>
+    )
+  }
+
+  if (error || !project) {
+    return (
+      <div className="ws-loading" style={{ flexDirection: 'column', gap: '0.5rem' }}>
+        <AlertCircle size={20} />
+        <span>Project not found.</span>
+        <Link to="/projects" style={{ color: '#7d8590', fontSize: '0.875rem' }}>Go back</Link>
+      </div>
+    )
+  }
 
   return (
     <>
-      <WorkspaceLayout
-        activeProjectId={projectId}
-        onCreateConversation={setConversationProject}
-        onCreateProject={() => setProjectModalOpen(true)}
-        onNavigate={onNavigate}
-        projectDetails={workspace.projectDetails}
-        projects={workspace.projects}
-      >
-        {loadingProject && <WorkspaceState title="Loading project" copy="Opening the underwriting file." />}
+      <div className="project-detail">
+        <div className="project-detail-header">
+          <h1 className="project-detail-title">{project.name}</h1>
+          {project.description && (
+            <p className="project-detail-description">{project.description}</p>
+          )}
+          <p className="project-detail-description" style={{ marginTop: '0.25rem' }}>
+            Created {formatDate(project.created_at)}
+          </p>
+        </div>
 
-        {!loadingProject && !project && (
-          <div className="state-panel">
-            <h2>Project not found</h2>
-            <p>This project may have been deleted or you may not have access.</p>
-            <NavButton className="dark-button" route="projects" onNavigate={onNavigate}>
-              Back to Projects
-            </NavButton>
+        {/* Files */}
+        <div className="pd-section">
+          <div className="pd-section-header">
+            <span className="pd-section-title">Files ({files.length})</span>
+            <button
+              className="pd-new-btn"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadFiles.isPending}
+            >
+              <Upload size={14} />
+              {uploadFiles.isPending ? 'Uploading…' : 'Upload'}
+            </button>
           </div>
-        )}
 
-        {project && (
-          <>
-            <div className="workspace-header">
-              <div>
-                <p className="eyebrow">Project</p>
-                <h1>{project.name}</h1>
-                <p>
-                  {project.description || "Upload source documents, create conversations, and keep every answer tied to this project."}
-                </p>
-                <span className="workspace-submeta">Created {formatDate(project.created_at)}</span>
-              </div>
-              <div className="workspace-actions">
-                <button className="dark-button" type="button" onClick={() => setConversationProject(project)}>
-                  <MessageSquare size={18} />
-                  New Conversation
-                </button>
-                <button className="icon-text-button danger-button" type="button" onClick={handleDeleteProject}>
-                  <Trash2 size={16} />
-                  Delete Project
-                </button>
-              </div>
+          <div
+            className={`pd-upload-zone ${isDragOver ? 'is-drag-over' : ''}`}
+            onDrop={handleDrop}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+            onDragLeave={() => setIsDragOver(false)}
+            onClick={() => fileInputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+          >
+            <p className="pd-upload-zone-text">
+              {isDragOver ? 'Drop to upload' : 'Drop files here or click to browse'}
+            </p>
+          </div>
+
+          {uploadFiles.isError && (
+            <p style={{ color: '#dc2626', fontSize: '0.8125rem', marginTop: '0.5rem' }}>
+              {uploadFiles.error?.message ?? 'Upload failed.'}
+            </p>
+          )}
+
+          {files.length > 0 && (
+            <div className="pd-file-list" style={{ marginTop: '0.75rem' }}>
+              {files.map((file) => (
+                <div key={file.id} className="pd-file-row">
+                  <FileText size={15} style={{ color: '#484f58', flexShrink: 0 }} />
+                  <span className="pd-file-name" title={file.original_name}>
+                    {file.original_name}
+                  </span>
+                  <span className={`pd-file-status status-${file.status ?? 'ready'}`}>
+                    {file.status ?? 'ready'}
+                  </span>
+                  <button
+                    className="pd-delete-btn"
+                    type="button"
+                    onClick={() => handleDeleteFile(file)}
+                    title="Delete file"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
             </div>
+          )}
+        </div>
 
-            {actionError && <p className="workspace-alert">{actionError}</p>}
-            {workspace.error && <p className="workspace-alert">{workspace.error}</p>}
-            {actionMessage && <p className="workspace-success">{actionMessage}</p>}
+        {/* Conversations */}
+        <div className="pd-section">
+          <div className="pd-section-header">
+            <span className="pd-section-title">Conversations ({conversations.length})</span>
+            <button className="pd-new-btn" type="button" onClick={() => setShowNewConv(true)}>
+              <Plus size={14} />
+              New
+            </button>
+          </div>
 
-            <section className="workspace-section">
-              <div className="workspace-section-heading">
-                <div>
-                  <h2>Upload files</h2>
-                  <p>Add PDFs, docs, spreadsheets, configs, logs, and other evidence to this project.</p>
+          <div className="pd-conversation-list">
+            {conversations.length === 0 ? (
+              <p style={{ fontSize: '0.875rem', color: '#7d8590', fontFamily: 'var(--font-ui)' }}>
+                No conversations yet. Start one above.
+              </p>
+            ) : (
+              conversations.map((conv) => (
+                <div key={conv.id} className="pd-conv-card-row">
+                  <Link
+                    to={`/projects/${projectId}/conversations/${conv.id}`}
+                    className="pd-conv-card"
+                  >
+                    <span className="pd-conv-card-title">{conv.title}</span>
+                    <span className="pd-conv-card-date">{formatDate(conv.created_at)}</span>
+                  </Link>
+                  <button
+                    className="pd-delete-btn"
+                    type="button"
+                    onClick={() => handleDeleteConversation(conv)}
+                    title="Delete conversation"
+                    style={{ flexShrink: 0 }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              </div>
-              <UploadArea disabled={isUploading} onUpload={handleUpload} />
-              {isUploading && <p className="workspace-note">Uploading and preparing files...</p>}
-            </section>
+              ))
+            )}
+          </div>
+        </div>
 
-            <section className="workspace-section">
-              <div className="workspace-section-heading">
-                <div>
-                  <h2>Files in project</h2>
-                  <p>{files.length} source file{files.length === 1 ? "" : "s"} available to conversations.</p>
-                </div>
-              </div>
-              <FileList files={files} onDeleteFile={handleDeleteFile} />
-            </section>
+        {/* Danger zone */}
+        <div className="pd-section" style={{ borderTop: '1px solid #21262d', paddingTop: '1.5rem', marginTop: '1rem' }}>
+          <button
+            className="pd-new-btn"
+            type="button"
+            onClick={handleDeleteProject}
+            disabled={deleteProject.isPending}
+            style={{ color: '#f85149', borderColor: '#4a1515' }}
+          >
+            <Trash2 size={14} />
+            {deleteProject.isPending ? 'Deleting…' : 'Delete project'}
+          </button>
+        </div>
+      </div>
 
-            <section className="workspace-section">
-              <div className="workspace-section-heading">
-                <div>
-                  <h2>Conversations</h2>
-                  <p>Ask separate underwriting questions without losing the project evidence context.</p>
-                </div>
-                <button className="pill-button" type="button" onClick={() => setConversationProject(project)}>
-                  <Plus size={18} />
-                  New Conversation
-                </button>
-              </div>
-              <ConversationList
-                conversations={conversations}
-                onDeleteConversation={handleDeleteConversation}
-                onNavigate={onNavigate}
-                projectId={projectId}
-              />
-            </section>
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        style={{ display: 'none' }}
+        onChange={(e) => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = '' }}
+      />
 
-            <NavButton className="workspace-back-link" route="projects" onNavigate={onNavigate}>
-              <ArrowLeft size={17} />
-              Back to Projects
-            </NavButton>
-          </>
-        )}
-      </WorkspaceLayout>
-
-      {projectModalOpen && (
-        <NewProjectModal
-          existingProjects={workspace.projects}
-          isSubmitting={isSubmitting}
-          onClose={() => setProjectModalOpen(false)}
-          onSubmit={handleCreateProject}
-          serverError={actionError}
-        />
-      )}
-      {conversationProject && (
+      {showNewConv && (
         <NewConversationModal
-          isSubmitting={isSubmitting}
-          onClose={() => setConversationProject(null)}
-          onSubmit={handleCreateConversation}
-          project={conversationProject}
-          serverError={actionError}
+          onConfirm={handleCreateConversation}
+          onCancel={() => setShowNewConv(false)}
+          loading={createConversation.isPending}
         />
       )}
     </>
-  );
-}
-
-function WorkspaceState({ copy, title }) {
-  return (
-    <div className="state-panel">
-      <h2>{title}</h2>
-      <p>{copy}</p>
-    </div>
-  );
+  )
 }

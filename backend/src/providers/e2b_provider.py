@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 from e2b import Sandbox
 
@@ -8,6 +9,10 @@ from src.config import get_settings
 
 _sandboxes: dict[str, Sandbox] = {}
 _lock = asyncio.Lock()
+
+AGENT_DIR = Path(__file__).resolve().parents[3] / "e2b-template" / "agent"
+AGENT_FILES = ("worker.py", "tools.py")
+WORKER_LOG = "/home/user/worker.log"
 
 
 async def register(session_id: str, sandbox: Sandbox) -> None:
@@ -25,33 +30,46 @@ async def deregister(session_id: str) -> None:
         _sandboxes.pop(session_id, None)
 
 
-def create_sandbox(envs: dict[str, str] | None = None) -> tuple[Sandbox, str]:
+def create_sandbox() -> tuple[Sandbox, str]:
     settings = get_settings()
-    kwargs: dict = {"timeout": settings.e2b.sandbox_timeout}
-    if envs:
-        kwargs["envs"] = envs
-
     template_id = settings.e2b.template_id
+    timeout = settings.e2b.sandbox_timeout
+    api_key = settings.e2b.api_key
+
     if template_id and template_id != "base":
-        sandbox = Sandbox.create(template_id, **kwargs)
+        sandbox = Sandbox.create(template_id, timeout=timeout, api_key=api_key)
     else:
-        sandbox = Sandbox.create(**kwargs)
+        sandbox = Sandbox.create(timeout=timeout, api_key=api_key)
 
     sandbox_id: str = getattr(sandbox, "sandbox_id", None) or getattr(sandbox, "sandboxId", "")
     return sandbox, str(sandbox_id)
 
 
 def extend_timeout(sandbox: Sandbox, seconds: int | None = None) -> None:
-    """Reset the idle timer. Call on every user message."""
     if seconds is None:
         seconds = int(get_settings().e2b.sandbox_timeout)
     sandbox.set_timeout(int(seconds))
 
 
 def upload_raw_files(sandbox: Sandbox, files: dict[str, bytes]) -> None:
-    """Upload raw bytes to /home/user/workspace/. Filename → bytes."""
     for filename, data in files.items():
         sandbox.files.write(f"/home/user/workspace/{filename}", data)
+
+
+def upload_agent_code(sandbox: Sandbox) -> None:
+    for filename in AGENT_FILES:
+        source = AGENT_DIR / filename
+        if not source.exists():
+            raise RuntimeError(f"Agent file missing: {source}")
+        sandbox.files.write(f"/home/user/{filename}", source.read_bytes())
+
+
+def start_worker(sandbox: Sandbox, envs: dict[str, str]) -> None:
+    sandbox.commands.run(
+        f"mkdir -p /home/user/workspace && python -u /home/user/worker.py > {WORKER_LOG} 2>&1",
+        envs=envs,
+        background=True,
+    )
 
 
 def list_workspace_files(sandbox: Sandbox) -> list[str]:
@@ -64,14 +82,13 @@ def list_workspace_files(sandbox: Sandbox) -> list[str]:
 
 def read_worker_log(sandbox: Sandbox, tail_lines: int = 200) -> str:
     result = sandbox.commands.run(
-        f"tail -n {tail_lines} /home/user/worker.log 2>/dev/null || echo '(no log yet)'",
+        f"tail -n {tail_lines} {WORKER_LOG} 2>/dev/null || echo '(no log yet)'",
         timeout=10,
     )
     return result.stdout
 
 
 def kill_sandbox(sandbox: Sandbox) -> None:
-    """Best-effort kill — ignore errors if it's already dead."""
     try:
         sandbox.kill()
     except Exception:
