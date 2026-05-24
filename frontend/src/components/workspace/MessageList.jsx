@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { FileText } from 'lucide-react'
+import { FileText, Sparkles } from 'lucide-react'
+import { getModel } from '../../lib/models'
 
 const MD_OPTS = { remarkPlugins: [remarkGfm] }
 
@@ -9,10 +10,22 @@ function MarkdownContent({ children }) {
   return <ReactMarkdown {...MD_OPTS}>{children}</ReactMarkdown>
 }
 
+function ModelTag({ modelId }) {
+  if (!modelId) return null
+  const m = getModel(modelId)
+  return (
+    <span className="msg-model-tag" title={m.sublabel}>
+      <Sparkles size={10} />
+      {m.label}
+    </span>
+  )
+}
+
 export function MessageList({
   messages = [],
   optimisticUserMessage = null,
   streamingText = '',
+  streamingModel = null,
   isStreaming = false,
 }) {
   const bottomRef = useRef(null)
@@ -51,6 +64,7 @@ export function MessageList({
             <MarkdownContent>{streamingText}</MarkdownContent>
             <span className="typing-cursor" />
           </div>
+          <ModelTag modelId={streamingModel} />
         </div>
       )}
 
@@ -67,6 +81,7 @@ function Message({ message }) {
       <div className="msg-bubble">
         {isUser ? message.content : <MarkdownContent>{message.content}</MarkdownContent>}
       </div>
+      {!isUser && <ModelTag modelId={message.model} />}
       {!isUser && message.citations?.length > 0 && (
         <div className="msg-citations">
           {message.citations.map((c, i) => (

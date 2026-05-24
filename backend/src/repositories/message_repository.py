@@ -18,6 +18,7 @@ class MessageRepository:
         role: str,
         content: str,
         citations: list[dict[str, Any]] | None = None,
+        model: str | None = None,
     ) -> dict:
         row = {
             "user_id": user_id,
@@ -25,6 +26,7 @@ class MessageRepository:
             "role": role,
             "content": content,
             "citations": citations,
+            "model": model,
         }
         result = self._db.table("messages").insert(row).execute()
         return result.data[0]
@@ -37,7 +39,7 @@ class MessageRepository:
     ) -> list[dict]:
         result = (
             self._db.table("messages")
-            .select("id, conversation_id, role, content, citations, created_at")
+            .select("id, conversation_id, role, content, citations, model, created_at")
             .eq("conversation_id", conversation_id)
             .eq("user_id", user_id)
             .order("created_at", desc=False)

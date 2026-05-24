@@ -3,16 +3,23 @@ OllyUW agent worker — runs inside the E2B sandbox.
 
 Lifecycle:
   1. Blocks on Redis Stream (INPUT_STREAM) waiting for user messages.
-  2. For each message: calls the LLM in an agentic loop (up to MAX_STEPS).
-  3. Publishes events (model_delta, tool_call, tool_result, final, …)
+  2. For each message: runs an agentic loop using **native tool calling**
+     via LangChain's `ChatOpenAI.bind_tools(...)`. The model is selected
+     per-message (Modal-hosted Gemma 4 with vLLM's `gemma4` tool parser,
+     or DeepSeek's native function calling). Same code path for both —
+     only the (base_url, api_key, model_name) triple changes.
+  3. Publishes events (text_delta, tool_call, tool_result, final, ...)
      to Redis Pub/Sub (OUTPUT_CHANNEL) so the backend can SSE-stream them.
-  4. Heartbeats OUTPUT every HEARTBEAT_INTERVAL seconds so the backend can
+  4. Heartbeats every HEARTBEAT_INTERVAL seconds so the backend can
      detect a dead sandbox.
 
-LLM protocol:
-  The model must reply with exactly one JSON object per turn:
-    {"type": "tool_call", "tool": "<name>", "args": {...}}   → execute tool
-    {"type": "final",     "text": "<answer>"}                 → done
+Why native tool calling (and not a JSON-in-text prompt contract):
+  vLLM's `--tool-call-parser gemma4` and DeepSeek's API both return
+  structured `tool_calls` in a dedicated response field, separate from
+  the visible `content` channel. That lets us publish clean `text_delta`
+  events from `chunk.content` and accumulate `tool_call_chunks` into
+  proper `tool_call` events — no streaming-JSON extractor, no risk of
+  format markers leaking into the user-visible text.
 """
 from __future__ import annotations
 
@@ -20,6 +27,7 @@ import json
 import os
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import Any
 from dotenv import load_dotenv
@@ -42,10 +50,7 @@ CONSUMER_NAME = f"sandbox-{SESSION_ID}"
 WORKSPACE = Path(os.environ.get("WORKSPACE", "/home/user/workspace")).resolve()
 STATE_PATH = Path("/home/user/agent_state.json")
 
-LLM_BASE_URL = os.environ.get("MODAL_TURBO_BASE_URL", "")
-LLM_MODEL = os.environ.get("MODAL_MODEL", "google/gemma-4-26B-A4B-it")
-LLM_API_KEY = os.environ.get("MODAL_API_KEY", "unused")
-
+DEFAULT_MODEL = "modal"
 HEARTBEAT_INTERVAL = 10  # seconds between heartbeats
 MAX_STEPS = 12
 
@@ -79,8 +84,14 @@ def _ensure_consumer_group() -> None:
 
 
 # ── State persistence ────────────────────────────────────────────────────────
+# Conversation history is a JSON-serialisable list of dicts:
+#   {"role": "user",      "content": str}
+#   {"role": "assistant", "content": str, "tool_calls"?: [{"id","name","args"}]}
+#   {"role": "tool",      "content": str, "tool_call_id": str, "name": str}
+# The tool_call/tool_result pairing (matching `tool_call_id`) is what stops
+# the model from re-calling tools it already called on the previous step.
 
-def _load_state() -> list[dict[str, str]]:
+def _load_state() -> list[dict[str, Any]]:
     if not STATE_PATH.exists():
         return []
     try:
@@ -91,174 +102,299 @@ def _load_state() -> list[dict[str, str]]:
         return []
 
 
-def _save_state(messages: list[dict[str, str]]) -> None:
+def _save_state(messages: list[dict[str, Any]]) -> None:
     STATE_PATH.write_text(
         json.dumps({"messages": messages}, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
 
 
-# ── Streaming JSON text-field extractor ─────────────────────────────────────
-#
-# The LLM is asked to emit a single JSON object — e.g.
-#   {"type":"final","text":"Hello\n**Bold**"}
-# It arrives token-by-token. We don't want the frontend to know that wire
-# format, so we extract the value of the `text` field incrementally on the
-# server and only publish clean text deltas. Returns None until the `text`
-# key has opened. Handles JSON escape sequences. Robust to incomplete input.
-
-def _extract_text_field(raw: str) -> str | None:
-    key_idx = raw.find('"text"')
-    if key_idx == -1:
-        return None
-
-    i = key_idx + len('"text"')
-    while i < len(raw) and raw[i].isspace():
-        i += 1
-    if i >= len(raw) or raw[i] != ":":
-        return None
-    i += 1
-    while i < len(raw) and raw[i].isspace():
-        i += 1
-    if i >= len(raw) or raw[i] != '"':
-        return None
-    i += 1  # now at first char of value
-
-    escapes = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/", "b": "\b", "f": "\f"}
-    out: list[str] = []
-    while i < len(raw):
-        ch = raw[i]
-        if ch == "\\":
-            if i + 1 >= len(raw):
-                break  # mid-escape, wait for more
-            nxt = raw[i + 1]
-            if nxt == "u":
-                if i + 5 >= len(raw):
-                    break  # mid-unicode
-                out.append(chr(int(raw[i + 2 : i + 6], 16)))
-                i += 6
-                continue
-            out.append(escapes.get(nxt, nxt))
-            i += 2
-        elif ch == '"':
-            break  # end of value
-        else:
-            out.append(ch)
-            i += 1
-
-    return "".join(out)
-
-
 # ── LLM ─────────────────────────────────────────────────────────────────────
 
 _SYSTEM_PROMPT = (
-    "You are a long-running AI agent inside an E2B Linux sandbox. "
-    "Your workspace is /home/user/workspace. "
-    "You have access to these tools: list_files, read_file, write_file, run_shell. "
-    "Respond with exactly one JSON object — no markdown, no extra text. "
-    "To call a tool: "
-    '{"type":"tool_call","tool":"<name>","args":{...}}. '
-    "To answer the user: "
-    '{"type":"final","text":"<your answer>"}. '
-    "Always use tools for any file, code, or shell request before answering."
+    "You are OllyUW, an AI agent helping the user analyse documents and code "
+    "inside an E2B Linux sandbox. Your workspace is /home/user/workspace, "
+    "where the user has uploaded files. Use the available tools to inspect, "
+    "read, search, and run shell commands on those files before answering. "
+    "When you have enough information, reply directly to the user in clear "
+    "Markdown."
 )
 
 
-def _call_model(messages: list[dict[str, str]]) -> dict[str, Any]:
-    from langchain_core.messages import HumanMessage, SystemMessage
+# OpenAI-spec tool descriptors. The model sees these via bind_tools(); the
+# actual execution still goes through `_tools.run_tool(name, args)` so the
+# workspace-safety guards in tools.py stay authoritative.
+_TOOL_SPECS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "list_files",
+            "description": (
+                "List the contents of a directory inside the workspace. "
+                "Returns one entry per line; directories end with '/'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path relative to the workspace. Default: '.' (workspace root).",
+                    },
+                },
+                "required": [],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "read_file",
+            "description": "Read a UTF-8 text file from the workspace and return its full contents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string", "description": "Path relative to the workspace."},
+                },
+                "required": ["path"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "write_file",
+            "description": (
+                "Write a UTF-8 text file to the workspace. Creates parent "
+                "directories as needed. Overwrites existing files."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "path":    {"type": "string", "description": "Path relative to the workspace."},
+                    "content": {"type": "string", "description": "Full file contents to write."},
+                },
+                "required": ["path", "content"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_shell",
+            "description": (
+                "Run a shell command inside the workspace and return stdout, "
+                "stderr, and the exit code. Use sparingly — prefer read_file "
+                "and list_files for inspection."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "description": "Shell command to execute."},
+                },
+                "required": ["command"],
+            },
+        },
+    },
+]
+
+
+def _resolve_llm_config(model: str) -> tuple[str, str, str]:
+    """
+    Map a stable model id to the concrete (base_url, api_key, model_name)
+    triple for that provider. Both backends are OpenAI-compatible; the
+    *server-side* tool parser (vLLM's `gemma4` for Modal, DeepSeek's
+    native parser for DeepSeek) takes care of structured tool_calls.
+    """
+    if model == "deepseek":
+        return (
+            os.environ.get("DEEPSEEK_BASE_URL", "https://api.deepseek.com"),
+            os.environ.get("DEEPSEEK_API_KEY", ""),
+            os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+        )
+    # default: Modal-hosted Gemma 4 via vLLM
+    return (
+        os.environ.get("MODAL_TURBO_BASE_URL", ""),
+        os.environ.get("MODAL_API_KEY", "unused"),
+        os.environ.get("MODAL_MODEL", "google/gemma-4-26B-A4B-it"),
+    )
+
+
+def _build_chat_messages(messages: list[dict[str, Any]]):
+    """
+    Translate persisted history into proper LangChain message objects.
+
+    Critical: assistant turns that called tools must be re-materialised as
+    AIMessage(tool_calls=[...]) and their results as ToolMessage with matching
+    tool_call_id, so the model sees the call/result pairing and doesn't
+    re-invoke the same tool on the next iteration.
+    """
+    from langchain_core.messages import (
+        AIMessage,
+        HumanMessage,
+        SystemMessage,
+        ToolMessage,
+    )
+
+    chat: list[Any] = [SystemMessage(content=_SYSTEM_PROMPT)]
+    for m in messages[-24:]:
+        role = m.get("role", "")
+        content = m.get("content", "") or ""
+        if role == "user":
+            chat.append(HumanMessage(content=content))
+        elif role == "assistant":
+            tcs = m.get("tool_calls") or []
+            chat.append(AIMessage(content=content, tool_calls=tcs))
+        elif role == "tool":
+            chat.append(ToolMessage(
+                content=content,
+                tool_call_id=m.get("tool_call_id", ""),
+                name=m.get("name", ""),
+            ))
+    return chat
+
+
+def _call_model_step(
+    messages: list[dict[str, Any]], model: str,
+) -> dict[str, Any]:
+    """
+    One model invocation. Streams visible text to clients as it arrives,
+    accumulates streamed tool_call_chunks server-side, and returns the
+    resolved turn:
+
+      {"kind": "final", "text": str}                  — model answered
+      {"kind": "tools", "calls": [{id,name,args}]}    — model wants tools
+    """
     from langchain_openai import ChatOpenAI
 
-    base_url = LLM_BASE_URL.rstrip("/")
-    if not base_url.endswith("/v1"):
+    base_url, api_key, model_name = _resolve_llm_config(model)
+    base_url = base_url.rstrip("/")
+    if base_url and not base_url.endswith("/v1"):
         base_url = f"{base_url}/v1"
 
     llm = ChatOpenAI(
-        model=LLM_MODEL,
+        model=model_name,
         base_url=base_url,
-        api_key=LLM_API_KEY,
+        api_key=api_key,
         temperature=0,
         timeout=180,
         max_retries=1,
         streaming=True,
-    )
+    ).bind_tools(_TOOL_SPECS)
 
-    chat_msgs = [SystemMessage(content=_SYSTEM_PROMPT)]
-    for m in messages[-24:]:
-        role, content = m.get("role", ""), m.get("content", "")
-        if role == "user":
-            chat_msgs.append(HumanMessage(content=content))
-        else:
-            chat_msgs.append(HumanMessage(content=f"{role}: {content}"))
+    _publish({"type": "model_start", "model": model})
 
-    _publish({"type": "model_start"})
-    parts: list[str] = []
-    emitted = ""  # text already published as text_delta
-    for chunk in llm.stream(chat_msgs):
-        text = str(chunk.content)
-        if not text:
-            continue
-        parts.append(text)
-        current = _extract_text_field("".join(parts))
-        if current is not None and len(current) > len(emitted):
-            _publish({"type": "text_delta", "text": current[len(emitted):]})
-            emitted = current
+    content_parts: list[str] = []
+    # tool_call_chunks come with a stable `index` we use to group fragments.
+    tc_acc: dict[int, dict[str, str]] = {}
 
-    raw = "".join(parts).strip()
-    _publish({"type": "model_end"})
+    for chunk in llm.stream(_build_chat_messages(messages)):
+        # 1) Visible text (clean — no JSON wrapper, no extractor needed).
+        text = getattr(chunk, "content", "") or ""
+        if isinstance(text, str) and text:
+            content_parts.append(text)
+            _publish({"type": "text_delta", "text": text})
 
-    try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
-        return {"type": "final", "text": raw}
+        # 2) Streamed tool-call fragments (name / args arrive piece-by-piece).
+        for tcc in (getattr(chunk, "tool_call_chunks", None) or []):
+            idx = tcc.get("index") or 0
+            slot = tc_acc.setdefault(idx, {"id": "", "name": "", "args": ""})
+            if tcc.get("id"):
+                slot["id"] = tcc["id"]
+            if tcc.get("name"):
+                slot["name"] = tcc["name"]
+            if tcc.get("args"):
+                slot["args"] = slot["args"] + tcc["args"]
+
+    _publish({"type": "model_end", "model": model})
+
+    if tc_acc:
+        calls: list[dict[str, Any]] = []
+        for idx in sorted(tc_acc):
+            slot = tc_acc[idx]
+            raw_args = slot["args"]
+            try:
+                args = json.loads(raw_args) if raw_args else {}
+            except json.JSONDecodeError:
+                args = {"_raw": raw_args}
+            if not isinstance(args, dict):
+                args = {"_value": args}
+            calls.append({
+                "id":   slot["id"] or f"call_{uuid.uuid4().hex[:12]}",
+                "name": slot["name"],
+                "args": args,
+            })
+        return {"kind": "tools", "calls": calls}
+
+    return {"kind": "final", "text": "".join(content_parts)}
 
 
 # ── Agent loop ───────────────────────────────────────────────────────────────
 
-def _process_message(user_text: str) -> None:
+def _process_message(user_text: str, model: str) -> None:
     messages = _load_state()
     messages.append({"role": "user", "content": user_text})
-    _publish({"type": "status", "text": "Processing message"})
+    _publish({"type": "status", "text": "Processing message", "model": model})
 
     for step in range(MAX_STEPS):
         _heartbeat()
         _publish({"type": "status", "text": f"Step {step + 1}/{MAX_STEPS}"})
 
-        action = _call_model(messages)
+        turn = _call_model_step(messages, model)
 
-        if action.get("type") == "final":
-            text = str(action.get("text", ""))
+        if turn["kind"] == "final":
+            text = turn["text"]
             messages.append({"role": "assistant", "content": text})
             _save_state(messages)
-            _publish({"type": "final", "text": text})
+            _publish({"type": "final", "text": text, "model": model})
             return
 
-        if action.get("type") != "tool_call":
-            fallback = f"Unexpected model response: {action}"
-            messages.append({"role": "assistant", "content": fallback})
-            _save_state(messages)
-            _publish({"type": "final", "text": fallback})
-            return
+        # turn["kind"] == "tools"
+        # Persist the assistant's tool-call turn so the model has the
+        # tool_call/tool_result pairing on the next pass.
+        messages.append({
+            "role": "assistant",
+            "content": "",
+            "tool_calls": turn["calls"],
+        })
 
-        tool = str(action.get("tool", ""))
-        tool_args = action.get("args", {})
-        if not isinstance(tool_args, dict):
-            tool_args = {}
+        for call in turn["calls"]:
+            call_id   = call["id"]
+            tool_name = call["name"]
+            tool_args = call["args"] if isinstance(call["args"], dict) else {}
 
-        _publish({"type": "tool_call", "tool": tool, "args": tool_args})
-        try:
-            output = _tools.run_tool(tool, tool_args)
-            _publish({"type": "tool_result", "tool": tool, "ok": True, "output": output})
-        except Exception as exc:
-            output = f"ERROR: {exc}"
-            _publish({"type": "tool_result", "tool": tool, "ok": False, "output": output})
+            _publish({
+                "type": "tool_call",
+                "id":   call_id,
+                "tool": tool_name,
+                "args": tool_args,
+            })
+            try:
+                output = _tools.run_tool(tool_name, tool_args)
+                ok = True
+            except Exception as exc:
+                output = f"ERROR: {exc}"
+                ok = False
 
-        messages.append({"role": "assistant", "content": json.dumps(action)})
-        messages.append({"role": "tool", "content": f"{tool} result:\n{output}"})
+            _publish({
+                "type":   "tool_result",
+                "id":     call_id,
+                "tool":   tool_name,
+                "ok":     ok,
+                "output": output,
+            })
+            messages.append({
+                "role":         "tool",
+                "content":      output,
+                "tool_call_id": call_id,
+                "name":         tool_name,
+            })
+
+        _save_state(messages)
 
     stop_msg = f"Reached max steps ({MAX_STEPS}). Ask me to continue if needed."
     messages.append({"role": "assistant", "content": stop_msg})
     _save_state(messages)
-    _publish({"type": "final", "text": stop_msg})
+    _publish({"type": "final", "text": stop_msg, "model": model})
 
 
 # ── Main event loop ──────────────────────────────────────────────────────────
@@ -292,8 +428,9 @@ def main() -> None:
                     raw = fields.get("data", "{}")
                     payload = json.loads(raw)
                     user_text = str(payload.get("message", ""))
-                    _publish({"type": "message_received", "message_id": message_id})
-                    _process_message(user_text)
+                    model = str(payload.get("model") or DEFAULT_MODEL)
+                    _publish({"type": "message_received", "message_id": message_id, "model": model})
+                    _process_message(user_text, model)
                     _redis.xack(INPUT_STREAM, CONSUMER_GROUP, message_id)
                     _publish({"type": "message_acked", "message_id": message_id})
                 except Exception as exc:

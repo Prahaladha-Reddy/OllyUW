@@ -54,10 +54,17 @@ class SessionRepository:
         length = await self._r.xlen(key)
         return int(length)
 
-    async def enqueue_message(self, session_id: str, message: str) -> str:
+    async def enqueue_message(self, session_id: str, message: str, model: str) -> str:
+        """
+        Push a user message onto the worker's input stream. `model` selects
+        which LLM the worker should call for this turn (e.g. 'modal',
+        'deepseek') — credentials for all providers are already in the
+        sandbox env, so this is a per-turn switch, not a session-wide one.
+        """
         key = f"agent:{session_id}:messages"
+        payload = {"message": message, "model": model}
         message_id: str = await self._r.xadd(
             key,
-            {"data": json.dumps({"message": message}, ensure_ascii=False)},
+            {"data": json.dumps(payload, ensure_ascii=False)},
         )
         return message_id

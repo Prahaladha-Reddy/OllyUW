@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { Trash2, FileText, Loader2, AlertCircle, MoreHorizontal, Plus } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useModel } from '../context/ModelContext'
 import {
   useProject,
   useDeleteProject,
@@ -24,6 +25,7 @@ export function ProjectDetail() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { session } = useAuth()
+  const { modelId } = useModel()
   const { data: project, isLoading, error } = useProject(projectId)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isStarting, setIsStarting] = useState(false)
@@ -54,7 +56,7 @@ export function ProjectDetail() {
       const result = await createConversation.mutateAsync({ title: deriveTitle(text) })
       const newId = result.id ?? result.conversation_id
 
-      await sendConversationMessage(session, projectId, newId, text.trim())
+      await sendConversationMessage(session, projectId, newId, { text: text.trim(), model: modelId })
       navigate(`/projects/${projectId}/conversations/${newId}`)
     } catch (err) {
       console.error(err)

@@ -110,6 +110,7 @@ export function useUploadConversationFiles(projectId, conversationId) {
 export function useSendMessage(projectId, conversationId) {
   const { session } = useAuth()
   return useMutation({
-    mutationFn: (text) => api.sendConversationMessage(session, projectId, conversationId, text),
+    mutationFn: (payload) =>
+      api.sendConversationMessage(session, projectId, conversationId, payload),
   })
 }

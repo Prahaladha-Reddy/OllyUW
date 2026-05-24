@@ -11,7 +11,14 @@ from fastapi import HTTPException
 
 from src.config import get_settings
 from src.models.file import FileRecord, FileStatus
-from src.models.message import Message, MessageRole, MessagesListResponse, SendMessageResponse
+from src.models.message import (
+    DEFAULT_MODEL,
+    Message,
+    MessageRole,
+    MessagesListResponse,
+    ModelId,
+    SendMessageResponse,
+)
 from src.providers import e2b_provider, storage_provider
 from src.repositories.conversation_repository import ConversationRepository
 from src.repositories.file_repository import FileRepository
@@ -28,6 +35,7 @@ def _to_message_model(row: dict) -> Message:
         role=row["role"],
         content=row["content"],
         citations=row.get("citations"),
+        model=row.get("model"),
         created_at=row["created_at"],
     )
 
@@ -64,7 +72,12 @@ class SessionService:
         return MessagesListResponse(messages=[_to_message_model(r) for r in rows])
 
     async def send_message(
-        self, user_id: str, project_id: str, conversation_id: str, text: str,
+        self,
+        user_id: str,
+        project_id: str,
+        conversation_id: str,
+        text: str,
+        model: ModelId = DEFAULT_MODEL,
     ) -> SendMessageResponse:
         conv = await self._require_conversation(user_id, project_id, conversation_id)
 
@@ -85,8 +98,9 @@ class SessionService:
         if sandbox is not None:
             await asyncio.to_thread(e2b_provider.extend_timeout, sandbox)
 
-        # Push to the worker's input stream
-        queued_id = await self._sessions.enqueue_message(session_id, text)
+        # Push to the worker's input stream — model selects which LLM the
+        # worker should call for this turn.
+        queued_id = await self._sessions.enqueue_message(session_id, text, model)
 
         return SendMessageResponse(message=_to_message_model(user_msg_row), queued_id=queued_id)
 
@@ -252,6 +266,7 @@ class SessionService:
                 role=MessageRole.ASSISTANT.value,
                 content=str(event.get("text", "")),
                 citations=event.get("citations"),
+                model=event.get("model"),
             )
         except Exception as exc:
             logger.warning("failed to persist final message: %s", exc)

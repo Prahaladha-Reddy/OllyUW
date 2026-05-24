@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Loader2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
+import { useModel } from '../context/ModelContext'
 import { useProject, useMessages, useUploadConversationFiles, useSendMessage } from '../hooks/queries'
 import { queryClient } from '../lib/queryClient'
 import { streamConversation } from '../lib/api'
@@ -11,6 +12,7 @@ import { MessageInput } from '../components/workspace/MessageInput'
 export function ConversationView() {
   const { projectId, conversationId } = useParams()
   const { session } = useAuth()
+  const { modelId } = useModel()
 
   const { data: project } = useProject(projectId)
   const { data: messages = [], isLoading, error } = useMessages(projectId, conversationId)
@@ -41,7 +43,7 @@ export function ConversationView() {
 
     try {
       if (files?.length) await uploadFiles.mutateAsync(files)
-      await sendMessage.mutateAsync(text)
+      await sendMessage.mutateAsync({ text, model: modelId })
 
       for await (const event of streamConversation(
         session, projectId, conversationId, controller.signal,
@@ -63,7 +65,7 @@ export function ConversationView() {
       setIsSending(false)
       queryClient.invalidateQueries({ queryKey: ['messages', projectId, conversationId] })
     }
-  }, [session, projectId, conversationId, isSending])
+  }, [session, projectId, conversationId, isSending, modelId])
 
   if (isLoading) {
     return (
@@ -103,6 +105,7 @@ export function ConversationView() {
         messages={messages}
         optimisticUserMessage={optimisticUserMsg}
         streamingText={streamingText}
+        streamingModel={modelId}
         isStreaming={isSending}
       />
 

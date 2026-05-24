@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback } from 'react'
 import { ArrowUp, Paperclip, X } from 'lucide-react'
+import { ModelPicker } from './ModelPicker'
 
 export function MessageInput({ disabled, onSend, placeholder = 'Ask a question about the documents…' }) {
   const [text, setText] = useState('')
@@ -81,24 +82,29 @@ export function MessageInput({ disabled, onSend, placeholder = 'Ask a question a
               }
             }}
           />
-          <button
-            type="button"
-            className="conv-attach-btn"
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach files"
-            disabled={disabled}
-          >
-            <Paperclip size={17} />
-          </button>
-          <button
-            type="button"
-            className="conv-send-btn"
-            disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
-            onClick={submit}
-            title="Send (Enter)"
-          >
-            <ArrowUp size={16} />
-          </button>
+        </div>
+        <div className="conv-input-controls">
+          <ModelPicker disabled={disabled} />
+          <div className="conv-input-controls-right">
+            <button
+              type="button"
+              className="conv-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach files"
+              disabled={disabled}
+            >
+              <Paperclip size={17} />
+            </button>
+            <button
+              type="button"
+              className="conv-send-btn"
+              disabled={disabled || (!text.trim() && attachedFiles.length === 0)}
+              onClick={submit}
+              title="Send (Enter)"
+            >
+              <ArrowUp size={16} />
+            </button>
+          </div>
         </div>
       </div>
       <input

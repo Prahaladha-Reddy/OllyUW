@@ -91,10 +91,10 @@ export function deleteConversation(session, projectId, conversationId) {
   });
 }
 
-export function sendConversationMessage(session, projectId, conversationId, text) {
+export function sendConversationMessage(session, projectId, conversationId, { text, model }) {
   return apiRequest(session, `/projects/${projectId}/conversations/${conversationId}/messages`, {
     method: "POST",
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, model }),
   });
 }
 

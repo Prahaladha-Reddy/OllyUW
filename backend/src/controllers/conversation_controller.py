@@ -98,7 +98,7 @@ async def send_message(
     the client can correlate with `/stream` events.
     """
     return await service.send_message(
-        current_user["user_id"], project_id, conversation_id, body.text,
+        current_user["user_id"], project_id, conversation_id, body.text, body.model,
     )
 
 
