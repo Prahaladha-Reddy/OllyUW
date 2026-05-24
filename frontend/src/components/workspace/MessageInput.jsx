@@ -1,7 +1,7 @@
 import { useRef, useState, useCallback } from 'react'
-import { Send, Paperclip, X } from 'lucide-react'
+import { ArrowUp, Paperclip, X } from 'lucide-react'
 
-export function MessageInput({ disabled, onSend }) {
+export function MessageInput({ disabled, onSend, placeholder = 'Ask a question about the documents…' }) {
   const [text, setText] = useState('')
   const [attachedFiles, setAttachedFiles] = useState([])
   const [isDragOver, setIsDragOver] = useState(false)
@@ -69,7 +69,7 @@ export function MessageInput({ disabled, onSend }) {
           <textarea
             ref={textareaRef}
             className="conv-textarea"
-            placeholder={isDragOver ? 'Drop files here…' : 'Ask a question about the documents…'}
+            placeholder={isDragOver ? 'Drop files here…' : placeholder}
             value={text}
             disabled={disabled}
             rows={1}
@@ -97,7 +97,7 @@ export function MessageInput({ disabled, onSend }) {
             onClick={submit}
             title="Send (Enter)"
           >
-            <Send size={16} />
+            <ArrowUp size={16} />
           </button>
         </div>
       </div>

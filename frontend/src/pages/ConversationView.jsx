@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ChevronRight, Loader2, AlertCircle, Upload, FileText } from 'lucide-react'
+import { Loader2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useProject, useMessages, useUploadConversationFiles, useSendMessage } from '../hooks/queries'
 import { queryClient } from '../lib/queryClient'
@@ -25,9 +25,7 @@ export function ConversationView() {
   const sendMessage = useSendMessage(projectId, conversationId)
 
   const conversation = project?.conversations?.find((c) => c.id === conversationId)
-  const projectFiles = project?.files ?? []
 
-  // Cleanup: if the component unmounts mid-stream, abort.
   useEffect(() => () => abortRef.current?.abort(), [])
 
   const handleSend = useCallback(async ({ text, files }) => {
@@ -89,32 +87,18 @@ export function ConversationView() {
 
   return (
     <div className="conv-view">
-      {/* Header breadcrumb */}
       <div className="conv-header">
-        <Link to="/projects" className="conv-header-breadcrumb">Projects</Link>
-        <ChevronRight size={12} style={{ color: '#30363d' }} />
         <Link to={`/projects/${projectId}`} className="conv-header-breadcrumb">
           {project?.name ?? '…'}
         </Link>
-        <ChevronRight size={12} style={{ color: '#30363d' }} />
+        <span className="conv-header-sep">/</span>
         <span className="conv-header-title">{conversation?.title ?? 'Conversation'}</span>
       </div>
 
-      {/* Error banner */}
       {sendError && (
-        <div style={{
-          padding: '0.5rem 1.5rem',
-          background: '#2d1515',
-          color: '#f85149',
-          fontSize: '0.8125rem',
-          fontFamily: 'var(--font-ui)',
-          flexShrink: 0,
-        }}>
-          {sendError}
-        </div>
+        <div className="conv-error-banner">{sendError}</div>
       )}
 
-      {/* Messages */}
       <MessageList
         messages={messages}
         optimisticUserMessage={optimisticUserMsg}
@@ -122,82 +106,11 @@ export function ConversationView() {
         isStreaming={isSending}
       />
 
-      {/* File upload strip */}
-      <ConvFileStrip
-        projectId={projectId}
-        conversationId={conversationId}
-        projectFiles={projectFiles}
+      <MessageInput
+        disabled={isSending}
+        onSend={handleSend}
+        placeholder={project?.name ? `Ask a question about ${project.name}…` : 'Ask a question about the documents…'}
       />
-
-      {/* Input */}
-      <MessageInput disabled={isSending} onSend={handleSend} />
-    </div>
-  )
-}
-
-function ConvFileStrip({ projectId, conversationId, projectFiles }) {
-  const [open, setOpen] = useState(false)
-  const [isDragOver, setIsDragOver] = useState(false)
-  const fileInputRef = useRef(null)
-  const uploadFiles = useUploadConversationFiles(projectId, conversationId)
-
-  async function handleUpload(fileList) {
-    if (!fileList.length) return
-    await uploadFiles.mutateAsync(Array.from(fileList))
-  }
-
-  return (
-    <div className="conv-upload-strip">
-      <div className="conv-upload-header" onClick={() => setOpen((o) => !o)}>
-        <span className="conv-upload-label">
-          <FileText size={12} />
-          Files ({projectFiles.length})
-        </span>
-        <span className="conv-upload-toggle">{open ? '▲ hide' : '▼ show'}</span>
-      </div>
-
-      {open && (
-        <div className="conv-upload-body">
-          {projectFiles.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.5rem' }}>
-              {projectFiles.map((f) => (
-                <span key={f.id} className="msg-citation">
-                  <FileText size={10} />
-                  {f.original_name}
-                </span>
-              ))}
-            </div>
-          )}
-          <div
-            className={`conv-upload-zone ${isDragOver ? 'is-drag-over' : ''}`}
-            onDrop={(e) => { e.preventDefault(); setIsDragOver(false); handleUpload(e.dataTransfer.files) }}
-            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
-            onDragLeave={() => setIsDragOver(false)}
-            onClick={() => fileInputRef.current?.click()}
-            role="button"
-            tabIndex={0}
-          >
-            <Upload size={13} />
-            <span>
-              {uploadFiles.isPending
-                ? 'Uploading…'
-                : 'Add files to this project (drop or click)'}
-            </span>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            style={{ display: 'none' }}
-            onChange={(e) => { if (e.target.files.length) handleUpload(e.target.files); e.target.value = '' }}
-          />
-          {uploadFiles.isError && (
-            <p style={{ margin: '0.375rem 0 0', fontSize: '0.75rem', color: '#f85149', fontFamily: 'var(--font-ui)' }}>
-              {uploadFiles.error?.message ?? 'Upload failed.'}
-            </p>
-          )}
-        </div>
-      )}
     </div>
   )
 }
