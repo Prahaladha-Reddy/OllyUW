@@ -49,13 +49,18 @@ export function ConversationView() {
     setLiveToolCalls([])
     setLiveStatus('Starting…')
 
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-
     try {
       if (files?.length) await uploadFiles.mutateAsync(files)
       await sendMessage.mutateAsync({ text, model: modelId })
+
+      // Create the abort controller only after the send POST completes.
+      // If we created it before the first await, React Strict Mode's
+      // synchronous cleanup (mount → cleanup → remount) would abort it
+      // before streamConversation even opens, causing a silent AbortError
+      // that clears the UI without showing the response.
+      abortRef.current?.abort()
+      const controller = new AbortController()
+      abortRef.current = controller
 
       for await (const event of streamConversation(
         session, projectId, conversationId, controller.signal,
@@ -102,7 +107,7 @@ export function ConversationView() {
         setSendError(err.message ?? 'Something went wrong. Try again.')
       }
     } finally {
-      controller.abort()
+      abortRef.current?.abort()
       setOptimisticUserMsg(null)
       setStreamingText('')
       setLiveToolCalls([])

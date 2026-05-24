@@ -2949,11 +2949,18 @@ p {
 .msg-bubble p:last-child { margin: 0; }
 .msg-bubble ul, .msg-bubble ol { margin: 0.25em 0 0.5em 1.25em; padding: 0; }
 .msg-bubble li { margin-bottom: 0.15em; }
-.msg-bubble h1, .msg-bubble h2, .msg-bubble h3 {
+.msg-bubble h1, .msg-bubble h2, .msg-bubble h3,
+.msg-bubble h4, .msg-bubble h5, .msg-bubble h6 {
   margin: 0.75em 0 0.25em;
-  font-family: var(--font-display);
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.3;
   color: #e6edf3;
 }
+.msg-bubble h1 { font-size: 1.05rem; }
+.msg-bubble h2 { font-size: 0.975rem; }
+.msg-bubble h3 { font-size: 0.9rem; }
+.msg-bubble h4, .msg-bubble h5, .msg-bubble h6 { font-size: 0.85rem; }
 .msg-bubble code {
   background: #0d1117;
   border: 1px solid #21262d;
