@@ -23,6 +23,7 @@ AI-agent liability risk.
   endpoint, with standard and TurboQuant variants.
 - Evaluation runners for hallucination, bias, and content safety using both
   direct model calls and the full E2B agent harness.
+- Langfuse observability for tracing LLM calls from the sandboxed agent runtime.
 
 ## Repository Layout
 
@@ -68,32 +69,57 @@ Model providers are configured behind OpenAI-compatible surfaces:
 Create a root `.env` file. The backend loads the root `.env` and
 `backend/.env`; root-level configuration is the simplest path for this repo.
 
-Common variables:
+Common backend variables:
 
 ```env
-E2B_API_KEY=
-E2B_TEMPLATE_ID=base
-E2B_SANDBOX_TIMEOUT=1200
-
-REDIS_URL=
-
-SUPABASE_URL=
-SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_SECRET_KEY=
-SUPABASE_BUCKET=submissions
-
+# Modal / open-source model serving
 MODAL_STANDARD_BASE_URL=
 MODAL_TURBO_BASE_URL=
 MODAL_API_KEY=unused
-MODAL_MODEL=google/gemma-4-26B-A4B-it
+MODAL_MODEL=
 
-DEEPSEEK_API_KEY=
+# DeepSeek / frontier model path
+DEEPSEEK_API_KEY=<deepseek-api-key>
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 DEEPSEEK_MODEL=deepseek-v4-flash
+
+# Agent transport
+REDIS_URL=<upstash-or-redis-url>
+
+# E2B sandbox runtime
+E2B_API_KEY=
+E2B_TEMPLATE_ID=
+E2B_SANDBOX_TIMEOUT=
+
+# Supabase auth, database, and storage
+SUPABASE_URL=
+SUPABASE_PUBLISHABLE_KEY=
+SUPABASE_SECRET_KEY=
+SUPABASE_BUCKET=
+
+# Unstructured document parsing
+UNSTRUCTURED_API_KEY=<unstructured-api-key>
+
+# Agent memory and external research
+MEM0_API_KEY=<mem0-api-key>
+PARALLEL_API_KEY=<parallel-api-key>
+
+# Langfuse LLM observability
+LANGFUSE_PUBLIC_KEY=<langfuse-public-key>
+LANGFUSE_SECRET_KEY=<langfuse-secret-key>
+LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
+
+# LangSmith tracing, kept in parallel with Langfuse
+LANGSMITH_API_KEY=<langsmith-api-key>
+LANGSMITH_BASE_URL=https://smith.langchain.com
+LANGSMITH_TRACING=true
 
 BACKEND_URL=http://localhost:8000
 FRONTEND_URL=http://localhost:5173
 ```
+
+Do not commit real API keys, Redis credentials, Supabase secret keys, or Langfuse
+secret keys. The checked-in README intentionally uses placeholders for secrets.
 
 Frontend variables belong in `frontend/.env`:
 
@@ -103,8 +129,11 @@ VITE_SUPABASE_URL=
 VITE_SUPABASE_PUBLISHABLE_KEY=
 ```
 
-Optional integrations are also supported by the backend and agent runtime:
-LangSmith, Mem0, Parallel, and Langfuse.
+Langfuse is the primary LLM observability path for the sandboxed agent. When
+`LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, the backend forwards
+them into each E2B worker session, and the agent records LLM traces through the
+Langfuse LangChain callback and OpenAI wrapper. LangSmith tracing is still
+available in parallel through the `LANGSMITH_*` variables.
 
 ## Backend
 
