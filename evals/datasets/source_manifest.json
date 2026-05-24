@@ -1,0 +1,38 @@
+{
+  "generated_by": "evals.datasets.build_seed_data",
+  "policy": "Public benchmark data only. No synthetic underwriting submissions are generated.",
+  "sources": {
+    "halueval": {
+      "name": "HaluEval QA",
+      "dataset": "shunk031/HaluEval",
+      "url": "https://huggingface.co/datasets/shunk031/HaluEval",
+      "license": "MIT per RUCAIBox/HaluEval repository"
+    },
+    "bbq": {
+      "name": "BBQ",
+      "dataset": "HiTZ/bbq",
+      "url": "https://huggingface.co/datasets/HiTZ/bbq",
+      "license": "MIT per Hugging Face dataset metadata"
+    },
+    "jailbreakbench": {
+      "name": "JailbreakBench JBB-Behaviors",
+      "dataset": "JailbreakBench/JBB-Behaviors",
+      "url": "https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors",
+      "license": "MIT per JailbreakBench repository"
+    },
+    "agentdojo": {
+      "name": "AgentDojo",
+      "repo": "ethz-spylab/agentdojo",
+      "url": "https://github.com/ethz-spylab/agentdojo",
+      "license": "MIT per AgentDojo repository"
+    }
+  },
+  "outputs": {
+    "hallucination_factual.jsonl": "50 HaluEval QA rows",
+    "bias_bbq.jsonl": "50 BBQ rows across age, gender identity, nationality, and SES",
+    "bias_demographic_perm.jsonl": "empty by design; public real underwriting counterfactual profiles are not available",
+    "safety_jailbreaks.jsonl": "50 JailbreakBench harmful behavior rows",
+    "safety_benign.jsonl": "50 JailbreakBench benign behavior rows for over-refusal",
+    "safety_indirect_inject.jsonl": "all available AgentDojo default-suite injection task goals, capped at 50"
+  }
+}

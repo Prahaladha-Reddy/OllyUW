@@ -62,6 +62,23 @@ class LangSmithGroup:
 
 
 @dataclass(frozen=True)
+class Mem0Group:
+    api_key: str
+
+
+@dataclass(frozen=True)
+class ParallelGroup:
+    api_key: str
+
+
+@dataclass(frozen=True)
+class LangfuseGroup:
+    public_key: str
+    secret_key: str
+    base_url: str
+
+
+@dataclass(frozen=True)
 class ServerGroup:
     host: str
     port: int
@@ -92,7 +109,7 @@ class Settings(BaseSettings):
     # DeepSeek (frontier LLM)
     deepseek_api_key: str = ""
     deepseek_base_url: str = "https://api.deepseek.com"
-    deepseek_model: str = "deepseek-chat"
+    deepseek_model: str = "deepseek-v4-flash"
 
     # Supabase
     supabase_url: str = ""
@@ -104,6 +121,17 @@ class Settings(BaseSettings):
     langsmith_api_key: str = ""
     langsmith_base_url: str = "https://smith.langchain.com"
     langsmith_tracing: bool = False
+
+    # Mem0 (long-term memory)
+    mem0_api_key: str = ""
+
+    # Parallel.ai (web search/research)
+    parallel_api_key: str = ""
+
+    # Langfuse (LLM observability)
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "https://cloud.langfuse.com"
 
     # Server
     host: str = "0.0.0.0"
@@ -154,6 +182,22 @@ class Settings(BaseSettings):
     @property
     def langsmith(self) -> LangSmithGroup:
         return LangSmithGroup(self.langsmith_api_key, self.langsmith_base_url, self.langsmith_tracing)
+
+    @property
+    def mem0(self) -> Mem0Group:
+        return Mem0Group(self.mem0_api_key)
+
+    @property
+    def parallel(self) -> ParallelGroup:
+        return ParallelGroup(self.parallel_api_key)
+
+    @property
+    def langfuse(self) -> LangfuseGroup:
+        return LangfuseGroup(
+            self.langfuse_public_key,
+            self.langfuse_secret_key,
+            self.langfuse_base_url,
+        )
 
     @property
     def server(self) -> ServerGroup:

@@ -1,6 +1,4 @@
 # OllyUW — AI Agent Underwriting Copilot
-### A take-home assignment for Ollive's Founding AI/ML Engineer role
-**Author:** Prahalad | **Date:** 2026-05-22
 
 ---
 
@@ -1039,20 +1037,20 @@ def get_llm(mode: str):
         # DeepSeek V4 Flash is OpenAI-compatible
         return ChatOpenAI(
             base_url="https://api.deepseek.com/v1",
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
             api_key=os.environ["DEEPSEEK_API_KEY"],
             temperature=0,
         )
 ```
 
-All LangGraph nodes, tool bindings, and structured-output calls use whichever `llm` is returned. The E2B agent code, tool definitions, and `AgentState` are identical for both modes. OSS calls the Modal endpoint; frontier calls Anthropic directly.
+All LangGraph nodes, tool bindings, and structured-output calls use whichever `llm` is returned. The E2B agent code, tool definitions, and `AgentState` are identical for both modes. OSS calls the Modal endpoint; frontier calls DeepSeek directly.
 
 ### 13.2 Modal OSS Deployment — LLM Endpoint Only
 
 Modal hosts only the vLLM inference server. No volumes for agent state, no orchestration — just a GPU endpoint that responds to standard OpenAI-compatible requests. We ship **two parallel deployments** of the same model:
 
-- `deploy_gemma4_standard.py` → FP8 KV cache, `max_model_len=65536`
-- `deploy_gemma4_turboquant.py` → TurboQuant K8V4 KV cache, `max_model_len=131072`
+- `deploy_gemma4_standard.py` → FP8 KV cache, `max_model_len=131072`
+- `deploy_gemma4_turboquant.py` → FP8 KV cache, `max_model_len=262144`
 
 Both apps share the same HF + vLLM cache volumes, so the second one to cold-start reuses the first one's weights and compiled CUDA graphs. The comparison answer ("does TurboQuant actually help on Gemma 4?") falls out of running the same eval against both URLs.
 
@@ -1110,9 +1108,8 @@ def serve():
         "--enable-prefix-caching",                  # critical: reuse system prompt + earlier agent turns
 
         # Memory
-        "--quantization", "awq",                    # INT4 weights, ~15.6 GB
-        "--kv-cache-dtype", "turboquant_k8v4",      # 2.6x KV compression, +1.17% PPL
-        "--max-model-len", "131072",                # 128K — TurboQuant gives ~125K headroom
+        "--kv-cache-dtype", "fp8",                  # Native FP8 KV cache on L40S
+        "--max-model-len", "262144",                # 256K native Gemma 4 26B A4B context
 
         # No multimodal in LLM (we pre-parse images upstream)
         "--limit-mm-per-prompt",
@@ -1133,8 +1130,8 @@ def serve():
 | Flag / setting                                                | Win                                                                 |
 |---------------------------------------------------------------|---------------------------------------------------------------------|
 | `--enable-prefix-caching`                                     | Agent reuses system prompt + earlier turns ⇒ ~30–50% lower TTFT     |
-| `--kv-cache-dtype turboquant_k8v4`                            | 2.6× KV compression, +1.17% PPL ⇒ 128K context on A10G              |
-| `--quantization awq`                                          | Weights at INT4 ⇒ 15.6 GB on A10G                                   |
+| `--kv-cache-dtype fp8`                                        | Native FP8 KV cache on L40S, used for the 256K Turbo path            |
+| FP8 dynamic weights                                            | Keeps the L40S deployment memory-efficient without AWQ-specific flags |
 | `--async-scheduling`                                          | Overlap scheduling and GPU compute                                  |
 | `--no-enforce-eager`                                          | CUDA graphs ⇒ +10–20% steady-state throughput                       |
 | `--gpu-memory-utilization 0.93`                               | +700 MB of KV cache headroom vs default 0.90                        |
@@ -1148,11 +1145,11 @@ def serve():
 
 - **EAGLE speculative decoding** — needs a Gemma 4 specific draft model; none published yet. The SGLang example uses MTP which is model-internal; Gemma 4 doesn't expose that.
 - **Sticky routing via `modal.experimental.http_server`** — only matters when multiple containers serve the same session. We're a single-user demo with `max_inputs=10`, so one container handles everything.
-- **`H200` / `H100` in the official recipe** — too expensive for the $28 budget. A10G fits 15.6 GB INT4 weights with room for 128 K context after TurboQuant.
+- **`H200` / `H100` in the official recipe** — too expensive for the $28 budget. The current L40S deployment uses FP8 weights/KV cache for longer context.
 
 **Why Gemma 4 26B-A4B:**
 - MoE: 26 B total, 3.8 B active params — same VRAM cost as dense 26 B but ~30% faster decode throughput
-- 256 K native context window; 128 K usable on A10G with TurboQuant K8V4
+- 256 K native context window; 256 K configured on the current L40S Turbo deployment
 - 82.6 MMLU-Pro, strong instruction-following and tool-calling quality
 - Apache 2.0 license
 
@@ -1161,11 +1158,6 @@ def serve():
 - Cost per full underwriting run (~30 LLM calls × 15 s): ~$0.14
 - Cold start cost (one per session, ~3 min): ~$0.055 — drops to ~$0.01 with both cache volumes warm
 - Effective development budget: 70+ hours of active coding — very comfortable
-
-**TurboQuant presets reference** (`--kv-cache-dtype` values, native vLLM 0.19+):
-- `turboquant_k8v4`: **2.6× compression, +1.17% PPL** ← what we use (safe)
-- `turboquant_4bit_nc`: 3.8× compression, +2.71% PPL (more aggressive, still OK)
-- `turboquant_3bit_nc`: 4.9× compression, +20.59% PPL (too lossy for underwriting)
 
 **E2B handles the rest:** agent orchestration, file I/O, and sandbox isolation run on E2B's free tier. Modal volumes only hold model weights and compile artifacts. The Modal endpoint URL is passed as an env var into the E2B sandbox at runtime.
 

@@ -207,22 +207,39 @@ class SessionService:
         session_id = str(uuid.uuid4())
 
         envs = {
-            "SESSION_ID": session_id,
-            "REDIS_URL": settings.redis.url,
-            "INPUT_STREAM": f"agent:{session_id}:messages",
-            "OUTPUT_CHANNEL": f"agent:{session_id}:chunks",
-            "HEARTBEAT_KEY": f"agent:{session_id}:heartbeat",
-            "WORKSPACE": "/home/user/workspace",
-            "MODAL_TURBO_BASE_URL": settings.modal.turbo_base_url,
-            "MODAL_STANDARD_BASE_URL": settings.modal.standard_base_url,
-            "MODAL_API_KEY": settings.modal.api_key,
-            "MODAL_MODEL": settings.modal.model,
-            "DEEPSEEK_API_KEY": settings.deepseek.api_key,
-            "DEEPSEEK_BASE_URL": settings.deepseek.base_url,
-            "DEEPSEEK_MODEL": settings.deepseek.model,
-            "LANGSMITH_API_KEY": settings.langsmith.api_key,
-            "LANGSMITH_ENDPOINT": settings.langsmith.base_url,
-            "LANGCHAIN_TRACING_V2": str(settings.langsmith.tracing).lower(),
+            # Identity
+            "SESSION_ID":               session_id,
+            "OLLYUW_USER_ID":           user_id,
+            "OLLYUW_PROJECT_ID":        project_id,
+            "OLLYUW_CONVERSATION_ID":   conversation_id,
+
+            # Transport
+            "REDIS_URL":                settings.redis.url,
+            "INPUT_STREAM":             f"agent:{session_id}:messages",
+            "OUTPUT_CHANNEL":           f"agent:{session_id}:chunks",
+            "HEARTBEAT_KEY":            f"agent:{session_id}:heartbeat",
+            "WORKSPACE":                "/home/user/workspace",
+
+            # LLM providers
+            "MODAL_TURBO_BASE_URL":     settings.modal.turbo_base_url,
+            "MODAL_STANDARD_BASE_URL":  settings.modal.standard_base_url,
+            "MODAL_API_KEY":            settings.modal.api_key,
+            "MODAL_MODEL":              settings.modal.model,
+            "DEEPSEEK_API_KEY":         settings.deepseek.api_key,
+            "DEEPSEEK_BASE_URL":        settings.deepseek.base_url,
+            "DEEPSEEK_MODEL":           settings.deepseek.model,
+
+            # External services
+            "MEM0_API_KEY":             settings.mem0.api_key,
+            "PARALLEL_API_KEY":         settings.parallel.api_key,
+            "LANGFUSE_PUBLIC_KEY":      settings.langfuse.public_key,
+            "LANGFUSE_SECRET_KEY":      settings.langfuse.secret_key,
+            "LANGFUSE_BASE_URL":        settings.langfuse.base_url,
+
+            # Legacy LangSmith (kept for now in parallel with Langfuse)
+            "LANGSMITH_API_KEY":        settings.langsmith.api_key,
+            "LANGSMITH_ENDPOINT":       settings.langsmith.base_url,
+            "LANGCHAIN_TRACING_V2":     str(settings.langsmith.tracing).lower(),
         }
 
         sandbox, sandbox_id = await asyncio.to_thread(e2b_provider.create_sandbox)

@@ -36,14 +36,32 @@ template = (
     # update agent logic without rebuilding the template.
     .pip_install(
         [
+            # Core agent runtime
             "redis>=5.0.0",
             "langchain-openai>=1.2.0",
             "langchain-core>=0.3.0",
+            "openai>=2.0.0",
             "python-dotenv>=1.0.1",
+
+            # Token counting / compaction
+            "tiktoken>=0.8.0",
+
+            # External services
+            "mem0ai>=0.1.0",
+            "parallel-web>=0.6.0",
+            "langfuse>=4.0.0",
+
+            # PDF + OCR (for the pdf-extraction skill)
+            "pdfplumber>=0.11.0",
+            "pymupdf>=1.24.0",
+            "pytesseract>=0.3.10",
+            "pillow>=10.0.0",
+            "pandas>=2.2.0",
         ]
     )
     # Common system utilities the agent might need in run_shell calls.
-    .apt_install(["curl", "git", "jq"])
+    # tesseract-ocr is required by pytesseract.
+    .apt_install(["curl", "git", "jq", "tesseract-ocr", "poppler-utils"])
 )
 
 
