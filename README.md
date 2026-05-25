@@ -6,12 +6,6 @@ and agent evaluations, and helps produce citable underwriting analysis across
 hallucination, bias, safety, autonomy, tool risk, HITL controls, and evidence
 grounding.
 
-The project is framed around Olliv's: compare an
-open-source model path against a frontier model path on hallucination rate,
-bias, and content safety. Instead of a generic chatbot benchmark, this repo
-implements that comparison in the product domain Ollive cares about: underwriting
-AI-agent liability risk.
-
 ## What This Builds
 
 - A React underwriting workspace for projects, conversations, file upload, model
