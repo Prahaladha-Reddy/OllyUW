@@ -1,9 +1,11 @@
 # OllyUW Agent Sandbox Template
-# Includes agent runtime dependencies + desktop GUI environment with VNC/noVNC
+# Desktop: Xvnc (TigerVNC) + Openbox + E2B's modified noVNC on port 6080
+# Xvnc IS the X server (no Xvfb+x11vnc copy step) and we use E2B's noVNC fork
+# (the one Manus uses) for smoother UX than stock apt novnc.
 
 FROM python:3.12-slim
 
-# Install Python dependencies
+# Install Python agent dependencies
 RUN pip install --no-cache-dir \
     redis>=5.0.0 \
     langchain-openai>=1.2.0 \
@@ -20,48 +22,56 @@ RUN pip install --no-cache-dir \
     pillow>=10.0.0 \
     pandas>=2.2.0
 
-# Install system dependencies: agent tools + desktop environment
+# System tools + desktop stack.
+# tigervnc-standalone-server provides Xvnc which renders directly to VNC frames
+# (no Xvfb framebuffer copy). Openbox is minimal (no compositor).
+# thunar: file manager. xterm: terminal. xsetroot: sets background color.
+# We DON'T install apt's novnc; we clone E2B's modified fork below.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git jq tesseract-ocr poppler-utils \
-    xvfb x11-xserver-utils xfce4 xfce4-terminal \
-    tigervnc-server novnc python3-websockify \
+    tigervnc-standalone-server \
+    openbox \
+    thunar \
+    xterm \
+    x11-xserver-utils \
+    python3-numpy \
     && rm -rf /var/lib/apt/lists/*
 
-# Create VNC directory
-RUN mkdir -p /root/.vnc && chmod 700 /root/.vnc
+# Install E2B's modified noVNC (same client Manus uses) + a fresh websockify.
+# The novnc_proxy script handles the WebSocket bridge and serves the web client.
+RUN git clone --depth 1 https://github.com/e2b-dev/noVNC.git /opt/noVNC \
+    && git clone --depth 1 https://github.com/novnc/websockify.git /opt/noVNC/utils/websockify \
+    && ln -sf /opt/noVNC/vnc.html /opt/noVNC/index.html
 
-# Create startup script for desktop environment + VNC + noVNC
-RUN cat > /usr/local/bin/start-desktop.sh << 'SCRIPT'
-#!/bin/bash
-set -e
+# Desktop startup script.
+# Sequence: Xvnc -> Openbox -> gray background -> file manager + terminal -> novnc_proxy
+RUN printf '%s\n' \
+    '#!/bin/bash' \
+    'export DISPLAY=:1' \
+    '' \
+    'pkill -f "Xvnc.*:1" 2>/dev/null || true' \
+    'pkill -f websockify 2>/dev/null || true' \
+    'pkill -f novnc_proxy 2>/dev/null || true' \
+    '' \
+    'Xvnc :1 -geometry 1920x1080 -depth 24 -rfbport 5900 -SecurityTypes None -localhost no -AlwaysShared &' \
+    'sleep 2' \
+    '' \
+    'DISPLAY=:1 openbox-session &' \
+    'sleep 1' \
+    '' \
+    'xsetroot -display :1 -solid "#1e1e2e"' \
+    'DISPLAY=:1 thunar /home/user/workspace &' \
+    'DISPLAY=:1 xterm -geometry 100x30+50+500 -bg "#1e1e2e" -fg "#cdd6f4" -fa "Monospace" -fs 11 &' \
+    'sleep 1' \
+    '' \
+    'exec /opt/noVNC/utils/novnc_proxy --vnc localhost:5900 --listen 6080 --web /opt/noVNC' \
+    > /usr/local/bin/start-desktop.sh
 
-# Kill any existing VNC processes
-pkill -f "Xvfb.*:1" || true
-pkill -f "tigervncsession" || true
-
-# Start virtual framebuffer on display :1
-export DISPLAY=:1
-Xvfb :1 -screen 0 1920x1080x24 &
-XVFB_PID=$!
-sleep 2
-
-# Start XFCE on the virtual display
-startxfce4 &
-XFCE_PID=$!
-sleep 3
-
-# Start TigerVNC server on port 5901
-vncserver :1 -geometry 1920x1080 -depth 24
-
-# Start noVNC WebSocket bridge on port 6080
-websockify --web=/usr/share/novnc 6080 localhost:5901 &
-
-# Keep container alive
-wait
-SCRIPT
 RUN chmod +x /usr/local/bin/start-desktop.sh
 
-# Set up workspace directory for agent
 RUN mkdir -p /home/user/workspace && chmod 755 /home/user/workspace
+
+# Copy agent package into the image so worker.py is available at runtime
+COPY agent/ /home/user/agent/
 
 WORKDIR /home/user/workspace

@@ -48,3 +48,21 @@ async def power_off_runtime(
     service: Annotated[ComputerService, Depends(get_computer_service)],
 ) -> ComputerResponse:
     return ComputerResponse(computer=await service.power_off_runtime(current_user["user_id"]))
+
+
+@router.post("/runtime/reset", response_model=ComputerResponse)
+async def reset_runtime(
+    current_user: Annotated[dict, Depends(require_auth)],
+    service: Annotated[ComputerService, Depends(get_computer_service)],
+) -> ComputerResponse:
+    """Clear sandbox_id and snapshot_id so the next Start creates fresh from template."""
+    return ComputerResponse(computer=service.reset_runtime(current_user["user_id"]))
+
+
+@router.get("/runtime/debug")
+async def debug_runtime(
+    current_user: Annotated[dict, Depends(require_auth)],
+    service: Annotated[ComputerService, Depends(get_computer_service)],
+) -> dict:
+    """Run diagnostic commands inside the sandbox and return output."""
+    return await service.debug_runtime(current_user["user_id"])

@@ -18,7 +18,7 @@ class ComputerRuntimeHandle:
 
     @property
     def desktop_url(self) -> str:
-        return f"https://{self.desktop_host}"
+        return f"https://{self.desktop_host}/vnc.html?autoconnect=true&resize=scale&reconnect=true"
 
 
 class E2BDesktopRuntime:
@@ -26,9 +26,10 @@ class E2BDesktopRuntime:
         self._settings = get_settings()
         self._desktop_port = 6080
 
-    def start(self, *, computer_id: str, user_id: str, sandbox_id: str | None, snapshot_id: str | None) -> ComputerRuntimeHandle:
+    def start(self, *, computer_id: str, user_id: str, sandbox_id: str | None, snapshot_id: str | None, agent_env: dict[str, str] | None = None) -> ComputerRuntimeHandle:
         sandbox = self._connect_or_create(computer_id=computer_id, user_id=user_id, sandbox_id=sandbox_id, snapshot_id=snapshot_id)
         self._bootstrap_workspace(sandbox)
+        self._start_agent_worker(sandbox, agent_env or {})
         return self._handle_for(sandbox)
 
     def pause(self, sandbox_id: str) -> None:
@@ -45,6 +46,11 @@ class E2BDesktopRuntime:
         info = sandbox.create_snapshot(name=snapshot_name)
         sandbox.kill()
         return info.snapshot_id
+
+    def run_command(self, sandbox_id: str, command: str) -> str:
+        sandbox = self.connect(sandbox_id)
+        result = sandbox.commands.run(command, timeout=30)
+        return result.stdout + result.stderr
 
     def connect(self, sandbox_id: str) -> Sandbox:
         return Sandbox.connect(
@@ -96,6 +102,7 @@ class E2BDesktopRuntime:
         lifecycle = {"on_timeout": "pause", "auto_resume": False}
         metadata = {"computer_id": computer_id, "user_id": user_id}
         template_id = self._settings.e2b.desktop_template_id or "desktop"
+        logger.info("creating sandbox from template: %s", template_id)
         return Sandbox.create(
             template_id,
             timeout=self._settings.e2b.sandbox_timeout,
@@ -143,9 +150,46 @@ fi
 """
         sandbox.commands.run(bootstrap_script, timeout=120)
 
-        # Start desktop environment (if the template includes it)
-        # This runs the VNC + noVNC servers on port 6080
+        # Launch desktop in background then wait for noVNC to be ready on port 6080.
+        # The script runs: Xvfb -> XFCE -> x11vnc -> websockify (foreground, keeps alive).
         try:
-            sandbox.commands.run("/usr/local/bin/start-desktop.sh", timeout=30)
+            sandbox.commands.run(
+                "nohup /usr/local/bin/start-desktop.sh > /tmp/desktop.log 2>&1 &",
+                timeout=10,
+            )
+            logger.info("desktop startup initiated on sandbox %s", sandbox.sandbox_id)
         except Exception as e:
             logger.warning("failed to start desktop: %s", e)
+            return
+
+        # Poll until websockify is listening on 6080 (up to 30s).
+        import time
+        for attempt in range(15):
+            try:
+                result = sandbox.commands.run(
+                    "ss -tlnp 2>/dev/null | grep -q ':6080' && echo READY || echo WAIT",
+                    timeout=5,
+                )
+                if "READY" in (result.stdout or ""):
+                    logger.info("desktop ready on port 6080 (attempt %d)", attempt + 1)
+                    return
+            except Exception:
+                pass
+            time.sleep(2)
+        logger.warning("desktop did not become ready within 30s — check /tmp/desktop.log")
+
+    def _start_agent_worker(self, sandbox: Sandbox, env: dict[str, str]) -> None:
+        if not env.get("SESSION_ID") or not env.get("REDIS_URL"):
+            logger.warning("skipping agent worker: SESSION_ID or REDIS_URL missing")
+            return
+        import shlex
+        env_str = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in env.items() if v)
+        # Kill any stale worker from a previous connect, then start fresh.
+        kill_cmd = "pkill -f 'python -m agent.worker' 2>/dev/null || true"
+        start_cmd = f"nohup env {env_str} python -m agent.worker > /tmp/worker.log 2>&1 &"
+        try:
+            sandbox.commands.run(kill_cmd, timeout=5)
+            sandbox.commands.run(start_cmd, timeout=10)
+            logger.info("agent worker started on sandbox %s (session=%s)", sandbox.sandbox_id, env.get("SESSION_ID"))
+        except Exception as exc:
+            logger.warning("failed to start agent worker: %s", exc)
