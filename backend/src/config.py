@@ -15,7 +15,9 @@ ROOT = Path(__file__).parent.parent.parent
 class E2BGroup:
     api_key: str
     template_id: str
+    desktop_template_id: str
     sandbox_timeout: int
+    workspace_path: str
 
 
 @dataclass(frozen=True)
@@ -84,7 +86,9 @@ class ServerGroup:
 class Settings(BaseSettings):
     e2b_api_key: str
     e2b_template_id: str = "base"
+    e2b_desktop_template_id: str = "desktop"
     e2b_sandbox_timeout: int = 1200
+    e2b_workspace_path: str = "/home/user/workspace"
 
     redis_url: str
 
@@ -130,7 +134,13 @@ class Settings(BaseSettings):
 
     @property
     def e2b(self) -> E2BGroup:
-        return E2BGroup(self.e2b_api_key, self.e2b_template_id, self.e2b_sandbox_timeout)
+        return E2BGroup(
+            self.e2b_api_key,
+            self.e2b_template_id,
+            self.e2b_desktop_template_id,
+            self.e2b_sandbox_timeout,
+            self.e2b_workspace_path,
+        )
 
     @property
     def redis(self) -> RedisGroup:

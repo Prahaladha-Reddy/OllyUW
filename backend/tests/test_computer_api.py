@@ -14,7 +14,7 @@ from src.dependencies import (
     require_auth,
 )
 from src.models.auth import AuthResponse
-from src.models.computer import ComputerRecord, ComputerStatus
+from src.models.computer import ComputerRecord, ComputerRuntimeState, ComputerStatus
 from src.models.connection import ConnectionRecord
 from src.models.file import FileRecord, FileType
 from src.models.vault import VaultItemRecord, VaultItemType
@@ -28,10 +28,74 @@ class FakeComputerService:
             id='computer-1',
             user_id=user_id,
             status=ComputerStatus.SLEEPING,
+            runtime_state=ComputerRuntimeState.STOPPED,
+            sandbox_id=None,
+            snapshot_id='snapshot-1',
+            workspace_path='/home/user/workspace',
+            git_enabled=True,
+            desktop_host=None,
+            desktop_port=None,
+            desktop_url=None,
+            last_booted_at=None,
+            last_paused_at=None,
+            last_snapshot_at=now,
+            error_message=None,
             last_active=now,
             created_at=now,
             updated_at=now,
         )
+
+    async def start_runtime(self, user_id: str) -> ComputerRecord:
+        now = datetime.now(timezone.utc)
+        return ComputerRecord(
+            id='computer-1',
+            user_id=user_id,
+            status=ComputerStatus.ONLINE,
+            runtime_state=ComputerRuntimeState.RUNNING,
+            sandbox_id='sandbox-1',
+            snapshot_id='snapshot-1',
+            workspace_path='/home/user/workspace',
+            git_enabled=True,
+            desktop_host='desktop.example.com',
+            desktop_port=6080,
+            desktop_url='https://desktop.example.com',
+            last_booted_at=now,
+            last_paused_at=None,
+            last_snapshot_at=now,
+            error_message=None,
+            last_active=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def pause_runtime(self, user_id: str) -> ComputerRecord:
+        now = datetime.now(timezone.utc)
+        return ComputerRecord(
+            id='computer-1',
+            user_id=user_id,
+            status=ComputerStatus.SLEEPING,
+            runtime_state=ComputerRuntimeState.PAUSED,
+            sandbox_id='sandbox-1',
+            snapshot_id='snapshot-1',
+            workspace_path='/home/user/workspace',
+            git_enabled=True,
+            desktop_host=None,
+            desktop_port=None,
+            desktop_url=None,
+            last_booted_at=now,
+            last_paused_at=now,
+            last_snapshot_at=now,
+            error_message=None,
+            last_active=now,
+            created_at=now,
+            updated_at=now,
+        )
+
+    async def snapshot_runtime(self, user_id: str) -> ComputerRecord:
+        return await self.start_runtime(user_id)
+
+    async def power_off_runtime(self, user_id: str) -> ComputerRecord:
+        return self.get_or_create(user_id)
 
 
 class FakeFileService:
@@ -119,6 +183,10 @@ def test_computer_routes_serve_second_computer_domain() -> None:
 
     with TestClient(app) as client:
         computer = client.get('/computer')
+        start_runtime = client.post('/computer/runtime/start')
+        pause_runtime = client.post('/computer/runtime/pause')
+        snapshot_runtime = client.post('/computer/runtime/snapshot')
+        power_off_runtime = client.post('/computer/runtime/power-off')
         files = client.get('/computer/files')
         file_detail = client.get('/computer/files/file-1')
         children = client.get('/computer/folders/file-1/children')
@@ -128,6 +196,19 @@ def test_computer_routes_serve_second_computer_domain() -> None:
 
     assert computer.status_code == 200
     assert computer.json()['computer']['id'] == 'computer-1'
+    assert computer.json()['computer']['runtime_state'] == 'stopped'
+
+    assert start_runtime.status_code == 200
+    assert start_runtime.json()['computer']['desktop_url'] == 'https://desktop.example.com'
+
+    assert pause_runtime.status_code == 200
+    assert pause_runtime.json()['computer']['runtime_state'] == 'paused'
+
+    assert snapshot_runtime.status_code == 200
+    assert snapshot_runtime.json()['computer']['sandbox_id'] == 'sandbox-1'
+
+    assert power_off_runtime.status_code == 200
+    assert power_off_runtime.json()['computer']['runtime_state'] == 'stopped'
 
     assert files.status_code == 200
     assert files.json()['files'][0]['file_type'] == 'folder'

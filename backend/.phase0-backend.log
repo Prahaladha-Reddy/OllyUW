@@ -216,3 +216,81 @@ INFO:     127.0.0.1:2294 - "GET /openapi.json HTTP/1.1" 200 OK
 INFO:     127.0.0.1:7493 - "GET /openapi.json HTTP/1.1" 200 OK
 2026-05-28 15:48:58,675 INFO ollyuw.access - GET /openapi.json 200 1.8ms
 INFO:     127.0.0.1:7494 - "GET /openapi.json HTTP/1.1" 200 OK
+2026-05-28 16:12:55,094 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 16:12:55,151 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 17:12:46,049 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 17:12:46,098 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 18:12:37,134 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 18:12:37,192 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 19:12:28,177 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 19:12:28,227 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 20:12:20,143 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 20:12:20,349 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 21:12:11,179 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 21:12:11,235 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 22:12:02,664 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 22:12:02,916 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 23:11:54,218 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 23:11:54,274 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=refresh_token "HTTP/2 200 OK"
+2026-05-28 23:21:53,536 INFO ollyuw.access - OPTIONS /computer 200 3.5ms
+INFO:     127.0.0.1:3698 - "OPTIONS /computer HTTP/1.1" 200 OK
+2026-05-28 23:21:53,551 INFO ollyuw.access - OPTIONS /computer/files 200 13.8ms
+INFO:     127.0.0.1:5841 - "OPTIONS /computer/files HTTP/1.1" 200 OK
+2026-05-28 23:21:53,554 INFO ollyuw.access - OPTIONS /computer/connections 200 2.2ms
+INFO:     127.0.0.1:5509 - "OPTIONS /computer/connections HTTP/1.1" 200 OK
+2026-05-28 23:21:53,556 INFO ollyuw.access - OPTIONS /computer/vault/items 200 4.0ms
+INFO:     127.0.0.1:9535 - "OPTIONS /computer/vault/items HTTP/1.1" 200 OK
+2026-05-28 23:21:53,985 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/user "HTTP/2 200 OK"
+2026-05-28 23:21:54,353 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/user "HTTP/2 200 OK"
+2026-05-28 23:21:54,747 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/user "HTTP/2 200 OK"
+2026-05-28 23:21:55,153 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/user "HTTP/2 200 OK"
+2026-05-28 23:21:56,772 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/computers?select=id%2Cuser_id%2Cstatus%2Clast_active%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&limit=1 "HTTP/2 200 OK"
+2026-05-28 23:21:56,786 INFO ollyuw.access - GET /computer 200 3232.7ms
+INFO:     127.0.0.1:3698 - "GET /computer HTTP/1.1" 200 OK
+2026-05-28 23:21:57,259 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/vault_items?select=id%2Cuser_id%2Citem_type%2Ckey%2Cencrypted_data%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&order=created_at.asc "HTTP/2 200 OK"
+2026-05-28 23:21:57,634 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/connections?select=id%2Cuser_id%2Ccomposio_account_id%2Cprovider%2Ccreated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&order=created_at.asc "HTTP/2 200 OK"
+2026-05-28 23:21:57,643 INFO ollyuw.access - GET /computer/vault/items 200 3744.1ms
+INFO:     127.0.0.1:4858 - "GET /computer/vault/items HTTP/1.1" 200 OK
+2026-05-28 23:21:57,645 INFO ollyuw.access - GET /computer/connections 200 3745.4ms
+INFO:     127.0.0.1:6760 - "GET /computer/connections HTTP/1.1" 200 OK
+2026-05-28 23:21:58,094 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/computers?select=id%2Cuser_id%2Cstatus%2Clast_active%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&limit=1 "HTTP/2 200 OK"
+2026-05-28 23:21:58,166 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/files?select=id%2Cuser_id%2Cparent_folder_id%2Cname%2Coriginal_name%2Cstorage_path%2Cfile_type%2Cautomation_trigger_id%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&order=file_type.asc%2Cname.asc "HTTP/2 200 OK"
+2026-05-28 23:21:58,168 INFO ollyuw.access - GET /computer/files 200 4269.7ms
+INFO:     127.0.0.1:4614 - "GET /computer/files HTTP/1.1" 200 OK
+2026-05-28 23:22:05,157 INFO ollyuw.access - OPTIONS /computer/runtime/start 200 0.3ms
+INFO:     127.0.0.1:8587 - "OPTIONS /computer/runtime/start HTTP/1.1" 200 OK
+2026-05-28 23:22:05,170 INFO ollyuw.access - POST /computer/runtime/start 404 0.5ms
+INFO:     127.0.0.1:8587 - "POST /computer/runtime/start HTTP/1.1" 404 Not Found
+2026-05-28 23:22:27,595 INFO ollyuw.access - OPTIONS /computer/runtime/start 200 0.3ms
+INFO:     127.0.0.1:5912 - "OPTIONS /computer/runtime/start HTTP/1.1" 200 OK
+2026-05-28 23:22:27,599 INFO ollyuw.access - POST /computer/runtime/start 404 0.4ms
+INFO:     127.0.0.1:5912 - "POST /computer/runtime/start HTTP/1.1" 404 Not Found
+2026-05-28 23:25:08,885 INFO ollyuw.access - OPTIONS /computer/runtime/start 200 0.2ms
+INFO:     127.0.0.1:7729 - "OPTIONS /computer/runtime/start HTTP/1.1" 200 OK
+2026-05-28 23:25:08,900 INFO ollyuw.access - POST /computer/runtime/start 404 0.3ms
+INFO:     127.0.0.1:7729 - "POST /computer/runtime/start HTTP/1.1" 404 Not Found
+2026-05-28 23:30:36,400 INFO ollyuw.access - OPTIONS /computer/runtime/start 200 0.3ms
+INFO:     127.0.0.1:2316 - "OPTIONS /computer/runtime/start HTTP/1.1" 200 OK
+2026-05-28 23:30:36,415 INFO ollyuw.access - POST /computer/runtime/start 404 0.4ms
+INFO:     127.0.0.1:2316 - "POST /computer/runtime/start HTTP/1.1" 404 Not Found
+2026-05-28 23:32:08,403 INFO ollyuw.access - POST /computer/runtime/start 404 0.3ms
+INFO:     127.0.0.1:2002 - "POST /computer/runtime/start HTTP/1.1" 404 Not Found
+2026-05-28 23:34:52,571 INFO ollyuw.access - GET /openapi.json 200 1.0ms
+INFO:     127.0.0.1:6512 - "GET /openapi.json HTTP/1.1" 200 OK
+2026-05-28 23:35:02,465 INFO ollyuw.access - GET /docs 200 0.5ms
+INFO:     127.0.0.1:9256 - "GET /docs HTTP/1.1" 200 OK
+2026-05-28 23:35:02,826 INFO ollyuw.access - GET /openapi.json 200 0.5ms
+INFO:     127.0.0.1:9256 - "GET /openapi.json HTTP/1.1" 200 OK
+2026-05-28 23:35:07,782 INFO ollyuw.access - GET /openapi.json 200 0.4ms
+INFO:     127.0.0.1:10238 - "GET /openapi.json HTTP/1.1" 200 OK
+2026-05-28 23:35:39,275 INFO httpx - HTTP Request: POST https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/token?grant_type=password "HTTP/2 200 OK"
+2026-05-28 23:35:39,289 INFO ollyuw.access - POST /auth/token 200 1283.4ms
+INFO:     127.0.0.1:2073 - "POST /auth/token HTTP/1.1" 200 OK
+2026-05-28 23:35:52,409 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/auth/v1/user "HTTP/2 200 OK"
+2026-05-28 23:35:53,753 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/computers?select=id%2Cuser_id%2Cstatus%2Clast_active%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&limit=1 "HTTP/2 200 OK"
+2026-05-28 23:35:53,764 INFO ollyuw.access - GET /computer 200 1816.0ms
+INFO:     127.0.0.1:6613 - "GET /computer HTTP/1.1" 200 OK
+2026-05-28 23:36:09,201 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/computers?select=id%2Cuser_id%2Cstatus%2Clast_active%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&limit=1 "HTTP/2 200 OK"
+2026-05-28 23:36:09,283 INFO httpx - HTTP Request: GET https://gtfzfxdprwntgnqxmprx.supabase.co/rest/v1/files?select=id%2Cuser_id%2Cparent_folder_id%2Cname%2Coriginal_name%2Cstorage_path%2Cfile_type%2Cautomation_trigger_id%2Ccreated_at%2Cupdated_at&user_id=eq.da3032a4-34c1-4a5f-92e3-33d6890a67eb&order=file_type.asc%2Cname.asc "HTTP/2 200 OK"
+2026-05-28 23:36:09,286 INFO ollyuw.access - GET /computer/files 200 859.2ms
+INFO:     127.0.0.1:3570 - "GET /computer/files HTTP/1.1" 200 OK

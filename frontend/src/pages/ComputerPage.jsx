@@ -6,6 +6,10 @@ import {
   useComputerConnections,
   useComputerFiles,
   useCreateComputerFolder,
+  usePauseComputerRuntime,
+  usePowerOffComputerRuntime,
+  useSnapshotComputerRuntime,
+  useStartComputerRuntime,
   useUploadComputerFiles,
   useVaultItems,
 } from '../hooks/queries'
@@ -37,6 +41,10 @@ export function ComputerPage() {
   const { data: vaultItems = [], isLoading: vaultLoading, error: vaultError } = useVaultItems()
   const uploadFiles = useUploadComputerFiles()
   const createFolder = useCreateComputerFolder()
+  const startRuntime = useStartComputerRuntime()
+  const pauseRuntime = usePauseComputerRuntime()
+  const snapshotRuntime = useSnapshotComputerRuntime()
+  const powerOffRuntime = usePowerOffComputerRuntime()
 
   const [folderName, setFolderName] = useState('')
   const [actionError, setActionError] = useState('')
@@ -44,8 +52,32 @@ export function ComputerPage() {
 
   const isLoading = computerLoading || filesLoading || connectionsLoading || vaultLoading
   const error = computerError || filesError || connectionsError || vaultError
-  const isWorking = uploadFiles.isPending || createFolder.isPending
+  const isRuntimeWorking =
+    startRuntime.isPending || pauseRuntime.isPending || snapshotRuntime.isPending || powerOffRuntime.isPending
+  const isWorking = uploadFiles.isPending || createFolder.isPending || isRuntimeWorking
   const displayFiles = useMemo(() => buildDisplayFiles(files), [files])
+
+  const runtimeState = computer?.runtime_state ?? 'stopped'
+  const runtimeTitle = runtimeState === 'running'
+    ? 'Running'
+    : runtimeState === 'paused'
+      ? 'Paused'
+      : runtimeState === 'starting'
+        ? 'Starting'
+        : runtimeState === 'error'
+          ? 'Error'
+          : 'Stopped'
+
+  async function runRuntimeAction(action, successMessage) {
+    setActionError('')
+    setActionSuccess('')
+    try {
+      await action()
+      setActionSuccess(successMessage)
+    } catch (requestError) {
+      setActionError(requestError.message || 'Could not update the computer runtime.')
+    }
+  }
 
   async function handleUpload(payload) {
     setActionError('')
@@ -111,6 +143,82 @@ export function ComputerPage() {
       <section className="workspace-section computer-primary-section">
         <div className="workspace-section-heading">
           <div>
+            <h2>Runtime</h2>
+            <p>One persistent desktop sandbox per computer. Resume it, pause it, snapshot it, or power it off.</p>
+          </div>
+          <div className="workspace-actions computer-runtime-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => runRuntimeAction(() => startRuntime.mutateAsync(), 'Computer started.')}
+              disabled={isRuntimeWorking}
+            >
+              {runtimeState === 'running' ? 'Reconnect' : 'Start'}
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => runRuntimeAction(() => pauseRuntime.mutateAsync(), 'Computer paused.')}
+              disabled={isRuntimeWorking || !computer?.sandbox_id}
+            >
+              Pause
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => runRuntimeAction(() => snapshotRuntime.mutateAsync(), 'Snapshot created.')}
+              disabled={isRuntimeWorking || !computer?.sandbox_id}
+            >
+              Snapshot
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => runRuntimeAction(() => powerOffRuntime.mutateAsync(), 'Computer powered off and snapshotted.')}
+              disabled={isRuntimeWorking || !computer?.sandbox_id}
+            >
+              Power off
+            </button>
+          </div>
+        </div>
+
+        <div className="computer-runtime-grid">
+          <div className="computer-runtime-status">
+            <p className="eyebrow">Machine</p>
+            <h3>{runtimeTitle}</h3>
+            <p>Workspace: {computer?.workspace_path || '/home/user/workspace'}</p>
+            <p>Git: {computer?.git_enabled ? 'enabled' : 'disabled'}</p>
+            <p>Sandbox: {computer?.sandbox_id || 'not allocated'}</p>
+            <p>Snapshot: {computer?.snapshot_id || 'none yet'}</p>
+            {computer?.last_booted_at && <p>Last booted {formatDateTime(computer.last_booted_at)}</p>}
+            {computer?.last_paused_at && <p>Last paused {formatDateTime(computer.last_paused_at)}</p>}
+            {computer?.last_snapshot_at && <p>Last snapshot {formatDateTime(computer.last_snapshot_at)}</p>}
+            {computer?.error_message && <p className="workspace-alert">{computer.error_message}</p>}
+          </div>
+
+          <div className="computer-runtime-screen">
+            {computer?.desktop_url ? (
+              <>
+                <iframe className="computer-desktop-frame" src={computer.desktop_url} title="Second computer desktop" />
+                <div className="computer-runtime-links">
+                  <a className="secondary-button" href={computer.desktop_url} target="_blank" rel="noreferrer">
+                    Open desktop in new tab
+                  </a>
+                </div>
+              </>
+            ) : (
+              <div className="empty-panel computer-empty-panel">
+                <h3>Desktop not running</h3>
+                <p>Start the computer to allocate or resume the desktop sandbox.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="workspace-section computer-primary-section">
+        <div className="workspace-section-heading">
+          <div>
             <h2>Upload files and folders</h2>
             <p>Start here. Upload files, upload a full folder, or create an empty folder.</p>
           </div>
@@ -140,7 +248,7 @@ export function ComputerPage() {
       <div className="project-grid computer-summary-grid">
         <SummaryCard
           eyebrow="Status"
-          title={computer?.status === 'online' ? 'Online' : 'Sleeping'}
+          title={runtimeTitle}
           detail={`Last active ${formatRelativeDate(computer?.last_active)}`}
           icon={<Monitor size={16} />}
         />

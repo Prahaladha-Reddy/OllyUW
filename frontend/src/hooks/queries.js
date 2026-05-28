@@ -12,6 +12,37 @@ export function useComputer() {
   })
 }
 
+function makeComputerRuntimeMutation(session, qc, mutationFn) {
+  return useMutation({
+    mutationFn: () => mutationFn(session),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['computer'] }),
+  })
+}
+
+export function useStartComputerRuntime() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return makeComputerRuntimeMutation(session, qc, api.startComputerRuntime)
+}
+
+export function usePauseComputerRuntime() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return makeComputerRuntimeMutation(session, qc, api.pauseComputerRuntime)
+}
+
+export function useSnapshotComputerRuntime() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return makeComputerRuntimeMutation(session, qc, api.snapshotComputerRuntime)
+}
+
+export function usePowerOffComputerRuntime() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return makeComputerRuntimeMutation(session, qc, api.powerOffComputerRuntime)
+}
+
 export function useComputerFiles() {
   const { session } = useAuth()
   return useQuery({

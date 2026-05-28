@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from supabase import Client
 
 from src.providers import redis_provider, supabase_provider
+from src.providers.e2b_provider import E2BDesktopRuntime
 from src.repositories.computer_repository import ComputerRepository
 from src.repositories.connection_repository import ConnectionRepository
 from src.repositories.file_repository import FileRepository
@@ -65,7 +66,7 @@ def get_auth_service() -> AuthService:
 def get_computer_service(
     computer_repo: Annotated[ComputerRepository, Depends(get_computer_repo)],
 ) -> ComputerService:
-    return ComputerService(computer_repo)
+    return ComputerService(computer_repo, E2BDesktopRuntime())
 
 
 def get_file_service(

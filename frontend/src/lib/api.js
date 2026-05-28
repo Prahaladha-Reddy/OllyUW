@@ -45,6 +45,22 @@ export function getComputer(session) {
   return apiRequest(session, '/computer')
 }
 
+export function startComputerRuntime(session) {
+  return apiRequest(session, '/computer/runtime/start', { method: 'POST' })
+}
+
+export function pauseComputerRuntime(session) {
+  return apiRequest(session, '/computer/runtime/pause', { method: 'POST' })
+}
+
+export function snapshotComputerRuntime(session) {
+  return apiRequest(session, '/computer/runtime/snapshot', { method: 'POST' })
+}
+
+export function powerOffComputerRuntime(session) {
+  return apiRequest(session, '/computer/runtime/power-off', { method: 'POST' })
+}
+
 export function listComputerFiles(session) {
   return apiRequest(session, '/computer/files')
 }

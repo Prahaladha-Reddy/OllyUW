@@ -9,8 +9,11 @@ of the base image.
 Usage:
     cd e2b-template
     e2b template build          # CLI approach
-    # — or —
-    python template.py          # programmatic build (requires E2B_API_KEY)
+
+Notes:
+    The Dockerfile in this directory defines the full build process.
+    The build includes agent dependencies and a desktop environment with
+    VNC + noVNC for GUI streaming to the frontend.
 """
 from __future__ import annotations
 
@@ -18,7 +21,7 @@ from pathlib import Path
 
 from e2b import Template, default_build_logger
 from dotenv import load_dotenv
-load_dotenv()
+
 TEMPLATE_NAME = "ollyuw-agent"
 TEMPLATE_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = TEMPLATE_DIR.parent
@@ -28,41 +31,11 @@ def load_env_files() -> None:
     load_dotenv(PROJECT_DIR / ".env")
     load_dotenv(TEMPLATE_DIR / ".env", override=True)
 
-template = (
-    Template()
-    .from_base_image()
-    # Pre-install all agent dependencies so sandboxes start instantly.
-    # The worker code itself is uploaded at session-creation time so you can
-    # update agent logic without rebuilding the template.
-    .pip_install(
-        [
-            # Core agent runtime
-            "redis>=5.0.0",
-            "langchain-openai>=1.2.0",
-            "langchain-core>=0.3.0",
-            "openai>=2.0.0",
-            "python-dotenv>=1.0.1",
 
-            # Token counting / compaction
-            "tiktoken>=0.8.0",
-
-            # External services
-            "mem0ai>=0.1.0",
-            "parallel-web>=0.6.0",
-            "langfuse>=4.0.0",
-
-            # PDF + OCR (for the pdf-extraction skill)
-            "pdfplumber>=0.11.0",
-            "pymupdf>=1.24.0",
-            "pytesseract>=0.3.10",
-            "pillow>=10.0.0",
-            "pandas>=2.2.0",
-        ]
-    )
-    # Common system utilities the agent might need in run_shell calls.
-    # tesseract-ocr is required by pytesseract.
-    .apt_install(["curl", "git", "jq", "tesseract-ocr", "poppler-utils"])
-)
+# Build from Dockerfile in this directory
+# The Dockerfile installs all agent dependencies + desktop/VNC setup
+load_env_files()
+template = Template().from_dockerfile(str(TEMPLATE_DIR / "Dockerfile"))
 
 
 if __name__ == "__main__":
