@@ -10,15 +10,16 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import get_settings
 from src.controllers.auth_controller import router as auth_router
-from src.controllers.conversation_controller import router as conversation_router
+from src.controllers.computer_controller import router as computer_router
+from src.controllers.connection_controller import router as connection_router
+from src.controllers.file_controller import router as file_router
 from src.controllers.health_controller import router as health_router
-from src.controllers.project_controller import router as project_router
-from src.controllers.session_controller import router as session_router
+from src.controllers.vault_controller import router as vault_router
 from src.middleware.error_handler import register_error_handlers
 from src.middleware.logging_middleware import LoggingMiddleware
 from src.providers import redis_provider
 
-logger = logging.getLogger("ollyuw.app")
+logger = logging.getLogger("olly.app")
 
 
 @asynccontextmanager
@@ -38,9 +39,9 @@ def create_app() -> FastAPI:
     settings = get_settings()
 
     app = FastAPI(
-        title="OllyUW Backend",
+        title="Olly Backend",
         version="0.1.0",
-        description="AI underwriting copilot — agent orchestration layer",
+        description="Persistent second-computer orchestration layer.",
         redirect_slashes=False,
         lifespan=lifespan,
     )
@@ -56,8 +57,9 @@ def create_app() -> FastAPI:
 
     app.include_router(health_router)
     app.include_router(auth_router)
-    app.include_router(project_router)
-    app.include_router(conversation_router)
-    app.include_router(session_router)
+    app.include_router(computer_router)
+    app.include_router(file_router)
+    app.include_router(connection_router)
+    app.include_router(vault_router)
 
     return app

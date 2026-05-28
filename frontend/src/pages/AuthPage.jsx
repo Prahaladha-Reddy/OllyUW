@@ -8,18 +8,18 @@ export function AuthPage() {
   const { session } = useAuth()
   const [mode, setMode] = useState('sign-in')
   const [showPassword, setShowPassword] = useState(false)
-  const [message, setMessage] = useState('Use your OllyUW account to continue.')
+  const [message, setMessage] = useState('Use your Olly account to continue.')
   const [loading, setLoading] = useState(false)
   const isSignUp = mode === 'sign-up'
 
-  if (session) return <Navigate to="/projects" replace />
+  if (session) return <Navigate to="/computer" replace />
 
   function selectMode(nextMode) {
     setMode(nextMode)
     setMessage(
       nextMode === 'sign-up'
-        ? 'Create an account to start underwriting with OllyUW.'
-        : 'Use your OllyUW account to continue.',
+        ? 'Create an account to unlock your second computer.'
+        : 'Use your Olly account to continue.',
     )
   }
 
@@ -51,11 +51,11 @@ export function AuthPage() {
     <section className="page auth-page section-dark" aria-label="Sign in or sign up">
       <div className="auth-shell">
         <div className="auth-copy">
-          <p className="eyebrow">Grounded Underwriting Workspace</p>
-          <h1>Bring the documents. Ask the agent.</h1>
+          <p className="eyebrow">Persistent AI Workspace</p>
+          <h1>Unlock the computer your AI works from.</h1>
           <p>
-            Review AI company risk, generate the memo, and keep asking questions with answers tied
-            to the source documents.
+            Files, sessions, and task history stay with the machine so the agent can keep working
+            across visits instead of starting cold on every request.
           </p>
         </div>
 
@@ -88,7 +88,7 @@ export function AuthPage() {
               name="email"
               type="email"
               autoComplete="email"
-              placeholder="underwriter@company.com"
+              placeholder="you@company.com"
               required
             />
 

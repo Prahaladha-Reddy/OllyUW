@@ -1,16 +1,8 @@
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
-
-
-class SignUpRequest(BaseModel):
-    email: str
-    password: str
-
-
-class LoginRequest(BaseModel):
-    email: str
-    password: str
 
 
 class AuthResponse(BaseModel):
@@ -18,6 +10,14 @@ class AuthResponse(BaseModel):
     refresh_token: str
     user_id: str
     email: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    refresh_token: str | None = None
+    user_id: str | None = None
+    email: str | None = None
 
 
 class UserResponse(BaseModel):

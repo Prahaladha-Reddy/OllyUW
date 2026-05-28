@@ -6,7 +6,7 @@ export function WorkflowSection() {
     <section className="workflow-section section-light">
       <div className="workflow-copy">
         <p className="eyebrow">Workflow</p>
-        <h2>From scattered evidence to a living underwriting file.</h2>
+        <h2>From blank chat to a machine that remembers.</h2>
       </div>
       <div className="workflow-list">
         {workflowSteps.map((step, index) => (
@@ -16,7 +16,7 @@ export function WorkflowSection() {
           </div>
         ))}
       </div>
-      <Link className="dark-button" to="/review">Start review</Link>
+      <Link className="dark-button" to="/review">Open the computer</Link>
     </section>
   )
 }

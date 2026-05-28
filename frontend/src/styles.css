@@ -1493,6 +1493,20 @@ p {
   max-width: 560px;
 }
 
+.computer-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+
+.computer-upload-actions .dark-button,
+.computer-upload-actions .secondary-button {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
 .upload-error,
 .modal-error,
 .row-error {
@@ -2242,6 +2256,11 @@ p {
   color: #e6edf3;
 }
 
+.ws-new-project-btn.is-active {
+  border-color: #58a6ff;
+  color: #e6edf3;
+}
+
 
 .ws-sidebar-nav {
   flex: 1;
@@ -2311,6 +2330,50 @@ p {
 .ws-project-item.is-active {
   background: #161b22;
   color: #e6edf3;
+}
+
+.computer-summary-grid {
+  margin-top: 1.5rem;
+}
+
+.computer-state-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.computer-empty-panel,
+.computer-file-list {
+  margin-top: 20px;
+}
+
+.computer-folder-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.computer-folder-input {
+  background: var(--paper);
+  border: 1px solid #dbe4d8;
+  border-radius: 999px;
+  color: var(--ink);
+  min-width: 220px;
+  padding: 10px 14px;
+}
+
+.computer-folder-input:focus {
+  border-color: #98f46f;
+  outline: none;
+}
+
+.computer-file-meta {
+  min-width: 0;
+}
+
+.computer-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .ws-project-icon { flex-shrink: 0; color: inherit; }
@@ -3574,4 +3637,3 @@ p {
   animation: blink 0.75s step-start infinite;
   font-size: 0.75em;
 }
-

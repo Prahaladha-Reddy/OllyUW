@@ -9,7 +9,7 @@ export function Header() {
     <header className="site-header">
       <Brand />
       {!session && (
-        <Link className="pill-button" to="/review">Start review</Link>
+        <Link className="pill-button" to="/review">Unlock computer</Link>
       )}
     </header>
   )

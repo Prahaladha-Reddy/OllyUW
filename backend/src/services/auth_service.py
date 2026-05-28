@@ -22,26 +22,6 @@ _token_cache_lock = asyncio.Lock()
 
 
 class AuthService:
-    async def signup(self, email: str, password: str) -> AuthResponse | dict:
-        try:
-            client = supabase_provider.get_anon_client()
-            result = await asyncio.to_thread(
-                client.auth.sign_up, {"email": email, "password": password}
-            )
-            if not result.session:
-                return {"status": "pending_confirmation", "email": result.user.email}
-            return AuthResponse(
-                access_token=result.session.access_token,
-                refresh_token=result.session.refresh_token,
-                user_id=result.user.id,
-                email=result.user.email,
-            )
-        except HTTPException:
-            raise
-        except Exception as exc:
-            logger.error("signup error: %s", exc)
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
     async def login(self, email: str, password: str) -> AuthResponse:
         try:
             client = supabase_provider.get_anon_client()

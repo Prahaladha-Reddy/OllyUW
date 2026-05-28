@@ -22,11 +22,11 @@ export const comparisonRows = [
 ];
 
 export const workflowSteps = [
-  "Bring in the full evidence package: security reports, contracts, architecture diagrams, control proof, logs, policies, and prior incidents.",
-  "OllyUW reads across the file, extracts underwriting signals, and organizes the evidence into a reviewable workspace.",
-  "Contradictions rise to the top: privacy promises that do not match architecture, approval gaps, unsupported accuracy claims, and missing control proof.",
-  "Draft a source-backed underwriting memo with risk findings, subjectivities, recommended terms, exclusions, and paths to coverage.",
-  "Interrogate the underwriting file after the memo is drafted: ask why a score moved, which source supports an exclusion, or what evidence would improve the terms.",
+  "Unlock one persistent computer instead of starting a fresh chat every time.",
+  "Upload files and folders so the agent has a stable workspace to read from and write to.",
+  "Connect the apps and browser sessions the agent needs to keep operating across visits.",
+  "Start a goal, leave the tab, and come back to the same machine state later.",
+  "Inspect the file tree, connected apps, and saved context from one control surface.",
 ];
 
 export const evidenceDocumentExamples = [

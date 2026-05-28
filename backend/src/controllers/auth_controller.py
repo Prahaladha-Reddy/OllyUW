@@ -3,32 +3,33 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response
-from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 
 from src.dependencies import get_auth_service, require_auth
-from src.models.auth import AuthResponse, LoginRequest, SignUpRequest, UserResponse
+from src.models.auth import TokenResponse, UserResponse
 from src.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/signup", response_model=AuthResponse, status_code=201)
-async def signup(
-    req: SignUpRequest,
+@router.post(
+    "/token",
+    response_model=TokenResponse,
+    summary="Issue OAuth2 bearer token",
+    description="Swagger and API clients should use this endpoint. Put the email address in the username field.",
+)
+async def issue_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
     auth: Annotated[AuthService, Depends(get_auth_service)],
-):
-    result = await auth.signup(req.email, req.password)
-    if isinstance(result, AuthResponse):
-        return result
-    return JSONResponse(status_code=202, content=result)
-
-
-@router.post("/login", response_model=AuthResponse)
-async def login(
-    req: LoginRequest,
-    auth: Annotated[AuthService, Depends(get_auth_service)],
-) -> AuthResponse:
-    return await auth.login(req.email, req.password)
+) -> TokenResponse:
+    result = await auth.login(form_data.username, form_data.password)
+    return TokenResponse(
+        access_token=result.access_token,
+        token_type="bearer",
+        refresh_token=result.refresh_token,
+        user_id=result.user_id,
+        email=result.email,
+    )
 
 
 @router.post("/logout")

@@ -2,35 +2,35 @@ export function AdvantageSection() {
   return (
     <section className="advantage-section section-dark">
       <div className="section-heading">
-        <h2>Move from intake to defensible underwriting faster.</h2>
+        <h2>Built around persistence, not prompt gymnastics.</h2>
         <p>
-          The agent does not stop at document upload. It builds the underwriting file, drafts the
-          memo, and stays available to answer follow-up questions from the same grounded evidence.
+          The useful part is not just model output. It is the durable machine state around the
+          model: folders, browser sessions, connectors, task history, and the ability to resume.
         </p>
       </div>
       <div className="advantage-grid">
         <article>
-          <span>Evidence</span>
-          <h3>Turn messy files into an underwriting record.</h3>
+          <span>Files</span>
+          <h3>Keep a real working file system.</h3>
           <p>
-            Security reports, contracts, policies, architecture diagrams, control logs, and incident
-            notes become structured evidence that can be searched, cited, and reviewed.
+            Upload folders, preserve structure, and give the agent a stable place to read, write,
+            organize, and hand work back to you.
           </p>
         </article>
         <article>
-          <span>Judgment</span>
-          <h3>Translate technical controls into insurance judgment.</h3>
+          <span>Sessions</span>
+          <h3>Reuse app logins and browser state.</h3>
           <p>
-            Unauthorized actions, data exposure, output reliability, bias, drift, operational
-            control, and loss severity roll into terms an underwriter can actually use.
+            The computer keeps the state that matters: cookies, credentials, bookmarks, local
+            storage, and enough context to continue the same task later.
           </p>
         </article>
         <article>
-          <span>Chat</span>
-          <h3>Question the file after the memo is written.</h3>
+          <span>Control</span>
+          <h3>See what the agent is doing.</h3>
           <p>
-            Ask what supports a finding, where a contradiction came from, or which evidence would
-            improve the quote. OllyUW answers from the source documents.
+            Tasks, outputs, and connected systems are visible from one shell so the product feels
+            like operating a machine, not hoping a chat history is enough.
           </p>
         </article>
       </div>

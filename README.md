@@ -1,22 +1,20 @@
-# OllyUW
+# Olly
 
-OllyUW is an AI underwriting copilot for insurance products that cover AI agents.
-It ingests messy AI-vendor submission packages, extracts risk signals, runs model
-and agent evaluations, and helps produce citable underwriting analysis across
-hallucination, bias, safety, autonomy, tool risk, HITL controls, and evidence
-grounding.
+Olly is a persistent web-based "second computer" for an AI agent. Each user gets
+one durable cloud computer with files, saved app sessions, background goals, and
+a visible control surface for the work the agent is doing.
 
 ## What This Builds
 
-- A React underwriting workspace for projects, conversations, file upload, model
-  selection, and risk/scoring views.
-- A FastAPI backend for auth-aware project, file, conversation, and session APIs.
-- An E2B sandboxed agent runtime that can process workspace files and stream
-  results back through Redis.
+- A React workspace that is shifting from project/chat primitives to a single
+  per-user computer shell.
+- A FastAPI backend for auth-aware computer, file, vault, connection, and goal APIs.
+- An E2B sandbox runtime that will become the persistent execution surface behind
+  each user's computer.
 - Modal deployment scripts for serving Gemma 4 through an OpenAI-compatible vLLM
   endpoint, with standard and TurboQuant variants.
-- Evaluation runners for hallucination, bias, and content safety using both
-  direct model calls and the full E2B agent harness.
+- Evaluation runners and older underwriting artifacts from the prior product
+  direction, still present in the repo while the pivot is completed.
 - Langfuse observability for tracing LLM calls from the sandboxed agent runtime.
 
 ## Repository Layout
@@ -35,11 +33,10 @@ tools/                Local utility scripts
 The local web app has three main runtime pieces:
 
 1. The frontend authenticates users with Supabase and calls the backend API.
-2. The backend stores project/conversation/file metadata in Supabase, stores
-   uploaded artifacts in Supabase Storage, and coordinates agent sessions.
-3. The E2B agent worker receives workspace files, calls the selected model
-   provider, performs tool-backed analysis, and publishes streamed events through
-   Redis.
+2. The backend stores computer/file/vault metadata in Supabase, stores uploaded
+   artifacts in Supabase Storage, and coordinates persistent machine state.
+3. The E2B worker is the execution environment the computer wakes when the agent
+   needs to act, with Redis used for coordination and streaming.
 
 Model providers are configured behind OpenAI-compatible surfaces:
 

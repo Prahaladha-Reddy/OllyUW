@@ -1,15 +1,71 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../context/AuthContext'
 import * as api from '../lib/api'
 
-// ── Queries ──────────────────────────────────────────────────────────────────
+export function useComputer() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['computer'],
+    queryFn: () => api.getComputer(session),
+    enabled: !!session,
+    select: (data) => data.computer,
+  })
+}
+
+export function useComputerFiles() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['computer', 'files'],
+    queryFn: () => api.listComputerFiles(session),
+    enabled: !!session,
+    select: (data) => data.files ?? [],
+  })
+}
+
+export function useComputerConnections() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['computer', 'connections'],
+    queryFn: () => api.listComputerConnections(session),
+    enabled: !!session,
+    select: (data) => data.connections ?? [],
+  })
+}
+
+export function useVaultItems() {
+  const { session } = useAuth()
+  return useQuery({
+    queryKey: ['computer', 'vault'],
+    queryFn: () => api.listVaultItems(session),
+    enabled: !!session,
+    select: (data) => data.items ?? [],
+  })
+}
+
+export function useCreateComputerFolder() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.createComputerFolder(session, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['computer', 'files'] }),
+  })
+}
+
+export function useUploadComputerFiles() {
+  const { session } = useAuth()
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (payload) => api.uploadComputerFiles(session, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['computer', 'files'] }),
+  })
+}
 
 export function useProjects() {
   const { session } = useAuth()
   return useQuery({
     queryKey: ['projects'],
     queryFn: () => api.listProjects(session),
-    enabled: !!session,
+    enabled: false && !!session,
     select: (data) => data.projects ?? [],
   })
 }
@@ -19,7 +75,7 @@ export function useProject(projectId) {
   return useQuery({
     queryKey: ['project', projectId],
     queryFn: () => api.getProject(session, projectId),
-    enabled: !!session && !!projectId,
+    enabled: false && !!session && !!projectId,
   })
 }
 
@@ -28,7 +84,7 @@ export function useMessages(projectId, conversationId) {
   return useQuery({
     queryKey: ['messages', projectId, conversationId],
     queryFn: () => api.listMessages(session, projectId, conversationId),
-    enabled: !!session && !!projectId && !!conversationId,
+    enabled: false && !!session && !!projectId && !!conversationId,
     staleTime: 0,
     select: (data) => {
       const msgs = data.messages ?? []
@@ -41,8 +97,6 @@ export function useMessages(projectId, conversationId) {
     },
   })
 }
-
-// ── Mutations ─────────────────────────────────────────────────────────────────
 
 export function useCreateProject() {
   const { session } = useAuth()

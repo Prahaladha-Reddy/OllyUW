@@ -25,6 +25,10 @@ def download(path: str) -> bytes:
     return _bucket().download(path)
 
 
+def copy(from_path: str, to_path: str) -> None:
+    _bucket().copy(from_path, to_path)
+
+
 def delete(paths: list[str]) -> None:
     if paths:
         _bucket().remove(paths)

@@ -3,22 +3,27 @@ from __future__ import annotations
 from typing import Annotated
 
 import redis.asyncio as aioredis
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, HTTPException, Security
+from fastapi.security import OAuth2PasswordBearer
 from supabase import Client
 
 from src.providers import redis_provider, supabase_provider
-from src.repositories.conversation_repository import ConversationRepository
+from src.repositories.computer_repository import ComputerRepository
+from src.repositories.connection_repository import ConnectionRepository
 from src.repositories.file_repository import FileRepository
-from src.repositories.message_repository import MessageRepository
-from src.repositories.project_repository import ProjectRepository
-from src.repositories.session_repository import SessionRepository
+from src.repositories.vault_repository import VaultRepository
 from src.services.auth_service import AuthService
-from src.services.conversation_service import ConversationService
+from src.services.computer_service import ComputerService
+from src.services.connection_service import ConnectionService
 from src.services.file_service import FileService
-from src.services.project_service import ProjectService
-from src.services.session_service import SessionService
+from src.services.vault_service import VaultService
 
-
+oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/token",
+    scheme_name="BearerAuth",
+    description="Authenticate with your Supabase email and password to receive a bearer token.",
+    auto_error=False,
+)
 
 
 def get_supabase() -> Client:
@@ -29,12 +34,10 @@ def get_redis() -> aioredis.Redis:
     return redis_provider.get_client()
 
 
-
-
-def get_project_repo(
+def get_computer_repo(
     db: Annotated[Client, Depends(get_supabase)],
-) -> ProjectRepository:
-    return ProjectRepository(db)
+) -> ComputerRepository:
+    return ComputerRepository(db)
 
 
 def get_file_repo(
@@ -43,75 +46,51 @@ def get_file_repo(
     return FileRepository(db)
 
 
-def get_conversation_repo(
+def get_connection_repo(
     db: Annotated[Client, Depends(get_supabase)],
-) -> ConversationRepository:
-    return ConversationRepository(db)
+) -> ConnectionRepository:
+    return ConnectionRepository(db)
 
 
-def get_message_repo(
+def get_vault_repo(
     db: Annotated[Client, Depends(get_supabase)],
-) -> MessageRepository:
-    return MessageRepository(db)
-
-
-def get_session_repo(
-    redis: Annotated[aioredis.Redis, Depends(get_redis)],
-) -> SessionRepository:
-    return SessionRepository(redis)
-
-
+) -> VaultRepository:
+    return VaultRepository(db)
 
 
 def get_auth_service() -> AuthService:
     return AuthService()
 
 
-def get_project_service(
-    project_repo: Annotated[ProjectRepository, Depends(get_project_repo)],
-    file_repo: Annotated[FileRepository, Depends(get_file_repo)],
-    conversation_repo: Annotated[ConversationRepository, Depends(get_conversation_repo)],
-) -> ProjectService:
-    return ProjectService(project_repo, file_repo, conversation_repo)
+def get_computer_service(
+    computer_repo: Annotated[ComputerRepository, Depends(get_computer_repo)],
+) -> ComputerService:
+    return ComputerService(computer_repo)
 
 
 def get_file_service(
-    project_repo: Annotated[ProjectRepository, Depends(get_project_repo)],
+    computer_repo: Annotated[ComputerRepository, Depends(get_computer_repo)],
     file_repo: Annotated[FileRepository, Depends(get_file_repo)],
 ) -> FileService:
-    return FileService(project_repo, file_repo)
+    return FileService(computer_repo, file_repo)
 
 
-def get_conversation_service(
-    project_repo: Annotated[ProjectRepository, Depends(get_project_repo)],
-    conversation_repo: Annotated[ConversationRepository, Depends(get_conversation_repo)],
-) -> ConversationService:
-    return ConversationService(project_repo, conversation_repo)
+def get_connection_service(
+    connection_repo: Annotated[ConnectionRepository, Depends(get_connection_repo)],
+) -> ConnectionService:
+    return ConnectionService(connection_repo)
 
 
-def get_session_service(
-    conversation_repo: Annotated[ConversationRepository, Depends(get_conversation_repo)],
-    file_repo: Annotated[FileRepository, Depends(get_file_repo)],
-    message_repo: Annotated[MessageRepository, Depends(get_message_repo)],
-    session_repo: Annotated[SessionRepository, Depends(get_session_repo)],
-    redis: Annotated[aioredis.Redis, Depends(get_redis)],
-) -> SessionService:
-    return SessionService(
-        conversation_repo=conversation_repo,
-        file_repo=file_repo,
-        message_repo=message_repo,
-        session_repo=session_repo,
-        redis=redis,
-    )
-
-
+def get_vault_service(
+    vault_repo: Annotated[VaultRepository, Depends(get_vault_repo)],
+) -> VaultService:
+    return VaultService(vault_repo)
 
 
 async def require_auth(
-    authorization: str | None = Header(None),
-    auth: AuthService = Depends(get_auth_service),
+    token: Annotated[str | None, Security(oauth2_scheme)],
+    auth: Annotated[AuthService, Depends(get_auth_service)],
 ) -> dict:
-    """Validates the Bearer token and returns {user_id, email}."""
-    if not authorization or not authorization.startswith("Bearer "):
+    if not token:
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    return await auth.verify_token(authorization[7:])
+    return await auth.verify_token(token)

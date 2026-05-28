@@ -12,3 +12,6 @@ project/
 evals/reports/*
 !evals/reports/.gitkeep
 plan.md
+project
+second_computer_build_plan.md
+second_computer.md

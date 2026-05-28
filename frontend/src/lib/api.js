@@ -41,6 +41,43 @@ export function listProjects(session) {
   return apiRequest(session, "/projects");
 }
 
+export function getComputer(session) {
+  return apiRequest(session, '/computer')
+}
+
+export function listComputerFiles(session) {
+  return apiRequest(session, '/computer/files')
+}
+
+export function listComputerConnections(session) {
+  return apiRequest(session, '/computer/connections')
+}
+
+export function listVaultItems(session) {
+  return apiRequest(session, '/computer/vault/items')
+}
+
+export function createComputerFolder(session, body) {
+  return apiRequest(session, '/computer/folders', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+export function uploadComputerFiles(session, { files, relativePaths = [], parentFolderId = null }) {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+  relativePaths.forEach((path) => formData.append('relative_paths', path))
+  if (parentFolderId) {
+    formData.append('parent_folder_id', parentFolderId)
+  }
+
+  return apiRequest(session, '/computer/files', {
+    method: 'POST',
+    body: formData,
+  })
+}
+
 export function createProject(session, body) {
   return apiRequest(session, "/projects", {
     method: "POST",
