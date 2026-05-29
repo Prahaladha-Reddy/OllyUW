@@ -51,6 +51,65 @@ echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no p
         result = await _to_thread(self._runtime.run_command, computer.sandbox_id, script)
         return {"sandbox_id": computer.sandbox_id, "output": result}
 
+    async def upload_workspace_files(
+        self,
+        user_id: str,
+        files: list[tuple[str, bytes]],
+        dest_path: str,
+    ) -> list[str]:
+        """Write files into the sandbox workspace and take a snapshot.
+
+        files: list of (original_filename, raw_bytes)
+        dest_path: desired folder inside workspace, e.g. "submissions/acme/"
+        Returns: list of absolute sandbox paths that were written.
+        """
+        computer = self.get_or_create(user_id)
+        if not computer.sandbox_id:
+            raise ValueError("computer is not running")
+
+        workspace_root = get_settings().e2b_workspace_path
+        # Normalise dest_path: strip leading slash, ensure trailing slash.
+        dest_clean = dest_path.strip("/")
+        folder = f"{workspace_root}/{dest_clean}" if dest_clean else workspace_root
+
+        written: list[str] = []
+        for filename, content in files:
+            # Sanitise filename: strip any path component the client may sneak in.
+            safe_name = filename.replace("/", "_").replace("..", "_")
+            remote_path = f"{folder}/{safe_name}"
+            await _to_thread(
+                self._runtime.write_workspace_file,
+                computer.sandbox_id,
+                remote_path,
+                content,
+            )
+            written.append(remote_path)
+
+        # Snapshot so files survive a future sandbox recreation.
+        snapshot_id = await _to_thread(
+            self._runtime.snapshot,
+            computer.sandbox_id,
+            f"computer-{computer.id}-latest",
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        self._computers.update(
+            computer.id,
+            {"snapshot_id": snapshot_id, "last_snapshot_at": now, "last_active": now},
+        )
+
+        return written
+
+    async def list_workspace_files(self, user_id: str) -> list[str]:
+        computer = self.get_or_create(user_id)
+        if not computer.sandbox_id:
+            raise ValueError("computer is not running")
+        workspace_root = get_settings().e2b_workspace_path
+        return await _to_thread(
+            self._runtime.list_workspace_files,
+            computer.sandbox_id,
+            workspace_root,
+        )
+
     def reset_runtime(self, user_id: str) -> ComputerRecord:
         computer = self.get_or_create(user_id)
         row = self._computers.update(
@@ -137,6 +196,15 @@ echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no p
         computer = self.get_or_create(user_id)
         if not computer.sandbox_id:
             return computer
+        # Snapshot before pausing so the filesystem state (workspace files,
+        # agent state) is preserved. Without this, only power-off created
+        # snapshots, so any files uploaded in a session would be lost if the
+        # sandbox ever needed to be recreated from the snapshot.
+        snapshot_id = await _to_thread(
+            self._runtime.snapshot,
+            computer.sandbox_id,
+            f"computer-{computer.id}-latest",
+        )
         await _to_thread(self._runtime.pause, computer.sandbox_id)
         now = datetime.now(timezone.utc).isoformat()
         row = self._computers.update(
@@ -144,9 +212,11 @@ echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no p
             {
                 "status": ComputerStatus.SLEEPING.value,
                 "runtime_state": ComputerRuntimeState.PAUSED.value,
+                "snapshot_id": snapshot_id,
                 "desktop_host": None,
                 "desktop_port": None,
                 "last_paused_at": now,
+                "last_snapshot_at": now,
                 "last_active": now,
                 "error_message": None,
             },

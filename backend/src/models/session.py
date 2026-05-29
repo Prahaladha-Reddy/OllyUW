@@ -25,7 +25,6 @@ class MessageRecord:
     created_at: str
 
 
-# ---------- Pydantic request/response models ----------
 
 from pydantic import BaseModel
 

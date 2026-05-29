@@ -76,6 +76,27 @@ class E2BDesktopRuntime:
         result = desktop.commands.run(command, timeout=30)
         return result.stdout + result.stderr
 
+    def write_workspace_file(
+        self, sandbox_id: str, workspace_path: str, content: bytes
+    ) -> None:
+        desktop = self._connect(sandbox_id)
+        # Ensure the parent directory exists before writing.
+        parent = workspace_path.rsplit("/", 1)[0]
+        if parent:
+            desktop.commands.run(f"mkdir -p {parent}", timeout=10)
+        desktop.files.write(workspace_path, content)
+
+    def list_workspace_files(self, sandbox_id: str, workspace_root: str) -> list[str]:
+        desktop = self._connect(sandbox_id)
+        result = desktop.commands.run(
+            f"find {workspace_root} -type f | sort 2>/dev/null || true",
+            timeout=15,
+        )
+        lines = (result.stdout or "").strip().splitlines()
+        # Return paths relative to workspace_root.
+        prefix = workspace_root.rstrip("/") + "/"
+        return [line[len(prefix):] for line in lines if line.startswith(prefix)]
+
     def _connect(self, sandbox_id: str) -> DesktopSandbox:
         return DesktopSandbox.connect(
             sandbox_id,

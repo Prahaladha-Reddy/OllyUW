@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 
 from src.dependencies import get_computer_service, require_auth
 from src.models.computer import ComputerResponse
@@ -66,3 +66,32 @@ async def debug_runtime(
 ) -> dict:
     """Run diagnostic commands inside the sandbox and return output."""
     return await service.debug_runtime(current_user["user_id"])
+
+
+@router.post("/workspace/upload", status_code=201)
+async def upload_workspace_files(
+    current_user: Annotated[dict, Depends(require_auth)],
+    service: Annotated[ComputerService, Depends(get_computer_service)],
+    files: list[UploadFile] = File(description="One or more files to upload to the workspace"),
+    path: str = Form(default="", description="Destination folder inside workspace (e.g. 'submissions/acme/')"),
+) -> dict:
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    file_data = [(f.filename or "file", await f.read()) for f in files]
+    try:
+        written = await service.upload_workspace_files(current_user["user_id"], file_data, path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"written": written}
+
+
+@router.get("/workspace")
+async def list_workspace_files(
+    current_user: Annotated[dict, Depends(require_auth)],
+    service: Annotated[ComputerService, Depends(get_computer_service)],
+) -> dict:
+    try:
+        files = await service.list_workspace_files(current_user["user_id"])
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {"files": files}
