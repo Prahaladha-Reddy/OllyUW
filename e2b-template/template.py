@@ -46,11 +46,13 @@ if __name__ == "__main__":
     if not os.getenv("E2B_API_KEY"):
         raise SystemExit("Set E2B_API_KEY before building the template.")
 
+    # 4 vCPU / 4GB gives XFCE + agent + Firefox enough headroom to feel
+    # like a real PC rather than a tiny VM.
     built = Template.build(
         template,
         TEMPLATE_NAME,
-        cpu_count=2,
-        memory_mb=2048,
+        cpu_count=4,
+        memory_mb=4096,
         on_build_logs=default_build_logger(),
     )
     print(f"\nTemplate built: {built.template_id}")

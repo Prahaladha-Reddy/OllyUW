@@ -22,11 +22,7 @@ def _to_record(row: dict) -> ComputerRecord:
         git_enabled=row.get("git_enabled", True),
         desktop_host=desktop_host,
         desktop_port=desktop_port,
-        desktop_url=(
-            f"https://{desktop_host}/vnc.html?autoconnect=true&resize=scale&reconnect=true"
-            if desktop_host and desktop_port
-            else None
-        ),
+        desktop_url=row.get("desktop_url"),
         last_booted_at=row.get("last_booted_at"),
         last_paused_at=row.get("last_paused_at"),
         last_snapshot_at=row.get("last_snapshot_at"),
@@ -119,6 +115,7 @@ echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no p
                     "sandbox_id": handle.sandbox_id,
                     "desktop_host": handle.desktop_host,
                     "desktop_port": handle.desktop_port,
+                    "desktop_url": handle.desktop_url,
                     "last_booted_at": now,
                     "last_active": now,
                     "error_message": None,

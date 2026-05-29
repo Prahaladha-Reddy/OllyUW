@@ -22,22 +22,26 @@ from e2b import Sandbox  # noqa: E402
 CHECKS = [
     ("template check: start-desktop.sh exists",
      "ls -la /usr/local/bin/start-desktop.sh 2>&1 || echo MISSING"),
-    ("template check: Xvnc installed",
-     "which Xvnc 2>&1 || echo MISSING"),
-    ("template check: openbox installed",
-     "which openbox 2>&1 || echo MISSING"),
-    ("template check: websockify installed",
-     "which websockify 2>&1 || echo MISSING"),
-    ("template check: novnc directory",
-     "ls -d /usr/share/novnc 2>&1 || echo MISSING"),
+    ("template check: kasmvncserver installed",
+     "which kasmvncserver 2>&1 || echo MISSING"),
+    ("template check: xfce4-session installed",
+     "which xfce4-session 2>&1 || echo MISSING"),
+    ("template check: firefox installed",
+     "which firefox 2>&1 || echo MISSING"),
     ("running processes (desktop stack)",
-     "ps aux | grep -E 'Xvnc|websockify|openbox|thunar|xterm' | grep -v grep || echo 'NO DESKTOP PROCESSES'"),
+     "ps -ef | grep -E 'Xvnc|kasmvnc|xfce4-session|xfdesktop|xfwm4|xfce4-panel' | grep -v grep || echo 'NO DESKTOP PROCESSES'"),
+    ("agent worker process",
+     "ps -ef | grep 'agent.worker' | grep -v grep || echo 'NO AGENT WORKER'"),
     ("listening ports",
      "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null || echo 'no ss/netstat'"),
-    ("desktop log",
-     "cat /tmp/desktop.log 2>&1 || echo 'NO LOG FILE'"),
-    ("startup script content",
-     "cat /usr/local/bin/start-desktop.sh 2>&1 | head -30 || echo MISSING"),
+    ("port 6901 (KasmVNC) check",
+     "ss -tlnp 2>/dev/null | grep ':6901' || echo 'NOT LISTENING'"),
+    ("desktop log (last 40 lines)",
+     "tail -40 /tmp/desktop.log 2>&1 || echo 'NO LOG FILE'"),
+    ("worker log (last 40 lines)",
+     "tail -40 /tmp/worker.log 2>&1 || echo 'NO LOG FILE'"),
+    ("xfconf check (Unable to contact settings server?)",
+     "DISPLAY=:1 sudo -u user xfconf-query -c xfwm4 -p /general/use_compositing 2>&1 || echo 'xfconf FAILED'"),
 ]
 
 
@@ -52,7 +56,10 @@ def main() -> None:
 
     print(f"Connecting to sandbox: {sandbox_id}")
     sandbox = Sandbox.connect(sandbox_id)
-    print(f"Connected. Host for port 6080: {sandbox.get_host(6080)}\n")
+    print(f"Connected.")
+    print(f"  port 6901 (KasmVNC): https://{sandbox.get_host(6901)}/")
+    print(f"  port 6080 (legacy):  https://{sandbox.get_host(6080)}/")
+    print()
 
     if run_script:
         print("=== Running start-desktop.sh manually (background) ===")

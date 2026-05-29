@@ -10,7 +10,7 @@ class ComputerRepository:
         self._db = db
         self._columns = (
             "id, user_id, status, runtime_state, sandbox_id, snapshot_id, "
-            "workspace_path, git_enabled, desktop_host, desktop_port, "
+            "workspace_path, git_enabled, desktop_host, desktop_port, desktop_url, "
             "last_booted_at, last_paused_at, last_snapshot_at, error_message, "
             "last_active, created_at, updated_at"
         )

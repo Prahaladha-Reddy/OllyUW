@@ -1,0 +1,2 @@
+ALTER TABLE computers
+  ADD COLUMN IF NOT EXISTS desktop_url TEXT;
