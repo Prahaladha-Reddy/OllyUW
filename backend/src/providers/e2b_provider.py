@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import shlex
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -154,33 +153,92 @@ class E2BDesktopRuntime:
         else:
             logger.warning("agent source not found at %s, skipping upload", AGENT_DIR)
 
-        # Install Python agent dependencies (they are not on the desktop template).
-        install_cmd = (
-            "pip3 install --quiet --break-system-packages "
-            "redis langchain-openai langchain-core openai python-dotenv tiktoken "
-            "mem0ai parallel-web langfuse pdfplumber pymupdf pytesseract "
-            "pillow pandas 2>&1 | tail -5"
-        )
-        try:
-            desktop.commands.run(install_cmd, timeout=180)
-            logger.info("agent Python deps installed on sandbox %s", desktop.sandbox_id)
-        except Exception as exc:
-            logger.warning("failed to install agent deps: %s", exc)
+        if not self._install_agent_deps(desktop):
             return
 
-        # Start the worker process.
-        env_str = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in env.items() if v)
-        kill_cmd = "pkill -f 'python3 -m agent.worker' 2>/dev/null || true"
-        start_cmd = (
-            f"cd /home/user && nohup env {env_str} "
-            "python3 -m agent.worker > /tmp/worker.log 2>&1 &"
+        self._launch_worker(desktop, env)
+
+    def _install_agent_deps(self, desktop: DesktopSandbox) -> bool:
+        # The desktop template ships system Python 3.10 with pip 22, which the
+        # unprivileged "user" account cannot write to system site-packages with.
+        # So install into the per-user site (~/.local) with --user. The worker
+        # also runs as "user", so these packages are importable at runtime.
+        #
+        # Only the packages the agent actually imports are installed. The heavy
+        # document/image libraries are deliberately excluded: nothing in the
+        # agent imports them, and their wheel builds are what made the install
+        # slow and prone to failure.
+        # redis is pinned: redis-py 8.x defaults to RESP3 and regresses blocking
+        # XREADGROUP reads into a socket timeout against Upstash. 7.4.0 is the
+        # version verified to return cleanly on an idle blocking read.
+        install_cmd = (
+            "pip3 install --user --quiet --no-warn-script-location "
+            "'redis==7.4.0' python-dotenv langchain-openai langchain-core openai "
+            "tiktoken mem0ai parallel-web langfuse"
         )
         try:
-            desktop.commands.run(kill_cmd, timeout=5)
-            desktop.commands.run(start_cmd, timeout=10)
-            logger.info("agent worker started (session=%s)", env.get("SESSION_ID"))
+            # No exit-code masking here: commands.run raises on a non-zero exit
+            # so a failed install is loud instead of silently swallowed.
+            desktop.commands.run(install_cmd, timeout=300)
         except Exception as exc:
-            logger.warning("failed to start agent worker: %s", exc)
+            logger.error("agent dep install failed on %s: %s", desktop.sandbox_id, exc)
+            return False
+
+        # Verify the critical imports actually resolve before launching the
+        # worker, so we never start a process that will crash on import.
+        verify = "import dotenv, redis, langchain_openai, langchain_core, openai, tiktoken"
+        try:
+            desktop.commands.run(f"python3 -c '{verify}'", timeout=40)
+        except Exception as exc:
+            logger.error("agent deps installed but imports fail on %s: %s", desktop.sandbox_id, exc)
+            return False
+
+        logger.info("agent Python deps installed on sandbox %s", desktop.sandbox_id)
+        return True
+
+    def _launch_worker(self, desktop: DesktopSandbox, env: dict[str, str]) -> None:
+        # Kill any stale worker from a previous start. The [a]gent.worker pattern
+        # is the classic self-exclusion trick: the regex matches the running
+        # worker's command line ("...-m agent.worker") but NOT pkill's own shell
+        # command line (which contains the literal "[a]gent.worker"), so pkill
+        # does not kill itself and exit with a signal code.
+        try:
+            desktop.commands.run("pkill -f '[a]gent.worker'; true", timeout=10)
+        except Exception as exc:
+            logger.warning("pkill of stale worker failed (continuing): %s", exc)
+
+        # Use the SDK's native envs= and background=True so env vars are passed
+        # directly without any shell quoting, and the process is backgrounded
+        # cleanly without nohup/& hacks.
+        try:
+            desktop.commands.run(
+                "mkdir -p /home/user/workspace && cd /home/user && "
+                "python3 -u -m agent.worker > /tmp/worker.log 2>&1",
+                envs=env,
+                background=True,
+            )
+        except Exception as exc:
+            logger.error("failed to start agent worker: %s", exc)
+            return
+
+        # Confirm the worker is actually alive and report the truth in the logs.
+        time.sleep(3)
+        try:
+            check = desktop.commands.run(
+                "pgrep -f '[a]gent.worker' >/dev/null && echo ALIVE || echo DEAD",
+                timeout=10,
+            )
+            if "ALIVE" in (check.stdout or ""):
+                logger.info("agent worker started (session=%s)", env.get("SESSION_ID"))
+            else:
+                log = desktop.commands.run("tail -20 /tmp/worker.log 2>&1 || true", timeout=10)
+                logger.error(
+                    "agent worker exited immediately (session=%s). worker.log tail:\n%s",
+                    env.get("SESSION_ID"),
+                    (log.stdout or "") + (log.stderr or ""),
+                )
+        except Exception as exc:
+            logger.warning("could not verify worker status: %s", exc)
 
     def _upload_agent_files(self, desktop: DesktopSandbox) -> None:
         try:

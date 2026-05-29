@@ -5,7 +5,7 @@ import json
 import os
 import re
 from dataclasses import asdict, dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 UNTRUSTED_OPEN = "<UNTRUSTED_DOCUMENT>"
@@ -132,7 +132,7 @@ def record_detection_event(result: ScanResult) -> None:
 
     path = Path(os.environ.get("SAFETY_AUDIT_LOG", "/home/user/safety_audit.jsonl"))
     event = {
-        "timestamp": datetime.now(UTC).isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "layer": "input",
         "source": result.source,
         "findings": [asdict(finding) for finding in result.findings],

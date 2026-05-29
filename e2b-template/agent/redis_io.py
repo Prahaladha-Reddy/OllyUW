@@ -15,7 +15,17 @@ from agent.config import (
     SESSION_ID,
 )
 
-_client: redis.Redis = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+# Long-lived consumer against a managed Redis (Upstash over TLS): keep the
+# connection warm and let redis-py reconnect transparently after an idle drop.
+# socket_timeout stays unset (None) so blocking XREADGROUP reads wait for the
+# server-side BLOCK window instead of tripping a client-side socket timeout.
+_client: redis.Redis = redis.Redis.from_url(
+    REDIS_URL,
+    decode_responses=True,
+    socket_keepalive=True,
+    health_check_interval=30,
+    retry_on_timeout=True,
+)
 _seq: int = 0
 
 

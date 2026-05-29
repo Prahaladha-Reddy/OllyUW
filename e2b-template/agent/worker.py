@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import time
 
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
+
 from agent import tools as _tools
 from agent.agent_loop import process_message
 from agent.config import (
@@ -42,13 +45,22 @@ def main() -> None:
             heartbeat()
             last_heartbeat = now
 
-        response = r.xreadgroup(
-            CONSUMER_GROUP,
-            CONSUMER_NAME,
-            {INPUT_STREAM: ">"},
-            count=1,
-            block=5000,
-        )
+        try:
+            response = r.xreadgroup(
+                CONSUMER_GROUP,
+                CONSUMER_NAME,
+                {INPUT_STREAM: ">"},
+                count=1,
+                block=5000,
+            )
+        except (RedisTimeoutError, RedisConnectionError) as exc:
+            # A blocking read can time out or the managed Redis can drop an idle
+            # connection. Neither is fatal: log it and let the next iteration
+            # reconnect transparently rather than killing the worker.
+            log.warning("redis read interrupted, retrying: %s", exc)
+            time.sleep(1)
+            continue
+
         if not response:
             continue
 
