@@ -12,11 +12,13 @@ from src.providers.e2b_provider import E2BDesktopRuntime
 from src.repositories.computer_repository import ComputerRepository
 from src.repositories.connection_repository import ConnectionRepository
 from src.repositories.file_repository import FileRepository
+from src.repositories.session_repository import SessionRepository
 from src.repositories.vault_repository import VaultRepository
 from src.services.auth_service import AuthService
 from src.services.computer_service import ComputerService
 from src.services.connection_service import ConnectionService
 from src.services.file_service import FileService
+from src.services.session_service import SessionService
 from src.services.vault_service import VaultService
 
 oauth2_scheme = OAuth2PasswordBearer(
@@ -86,6 +88,20 @@ def get_vault_service(
     vault_repo: Annotated[VaultRepository, Depends(get_vault_repo)],
 ) -> VaultService:
     return VaultService(vault_repo)
+
+
+def get_session_repo(
+    db: Annotated[Client, Depends(get_supabase)],
+) -> SessionRepository:
+    return SessionRepository(db)
+
+
+def get_session_service(
+    session_repo: Annotated[SessionRepository, Depends(get_session_repo)],
+    computer_repo: Annotated[ComputerRepository, Depends(get_computer_repo)],
+    redis: Annotated[aioredis.Redis, Depends(get_redis)],
+) -> SessionService:
+    return SessionService(session_repo, computer_repo, redis)
 
 
 async def require_auth(

@@ -14,6 +14,7 @@ from src.controllers.computer_controller import router as computer_router
 from src.controllers.connection_controller import router as connection_router
 from src.controllers.file_controller import router as file_router
 from src.controllers.health_controller import router as health_router
+from src.controllers.session_controller import router as session_router
 from src.controllers.vault_controller import router as vault_router
 from src.middleware.error_handler import register_error_handlers
 from src.middleware.logging_middleware import LoggingMiddleware
@@ -61,5 +62,6 @@ def create_app() -> FastAPI:
     app.include_router(file_router)
     app.include_router(connection_router)
     app.include_router(vault_router)
+    app.include_router(session_router)
 
     return app
