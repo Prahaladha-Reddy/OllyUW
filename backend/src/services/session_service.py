@@ -74,7 +74,6 @@ class SessionService:
         await pubsub.subscribe(channel)
         logger.info("SSE subscribed to %s session=%s", channel, session_id)
 
-        final_event: dict | None = None
         elapsed = 0.0
 
         try:
@@ -94,10 +93,27 @@ class SessionService:
                 except (json.JSONDecodeError, KeyError):
                     continue
 
+                is_final = event.get("type") == "final"
+
+                if is_final:
+                    # Save to DB BEFORE yielding so the row already exists by the
+                    # time the client receives this event and re-fetches messages.
+                    try:
+                        self._sessions.add_message(
+                            session_id,
+                            user_id,
+                            "assistant",
+                            event.get("text", ""),
+                            model=event.get("model"),
+                            citations=event.get("citations"),
+                        )
+                        logger.info("saved assistant message session=%s", session_id)
+                    except Exception as exc:
+                        logger.warning("failed to save assistant message: %s", exc)
+
                 yield event
 
-                if event.get("type") == "final":
-                    final_event = event
+                if is_final:
                     break
         finally:
             try:
@@ -105,20 +121,6 @@ class SessionService:
                 await pubsub.aclose()
             except Exception:
                 pass
-
-            if final_event is not None:
-                try:
-                    self._sessions.add_message(
-                        session_id,
-                        user_id,
-                        "assistant",
-                        final_event.get("text", ""),
-                        model=final_event.get("model"),
-                        citations=final_event.get("citations"),
-                    )
-                    logger.info("saved assistant message session=%s", session_id)
-                except Exception as exc:
-                    logger.warning("failed to save assistant message: %s", exc)
 
     def _require_session(self, user_id: str, session_id: str) -> dict:
         session = self._sessions.get(session_id, user_id)

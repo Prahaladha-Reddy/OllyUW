@@ -105,15 +105,13 @@ export function useChat(sessionId: string | null) {
           // stream_connected / status / tool_call / worker_ready are ignored.
         }
 
-        // Swap the streaming placeholder for the finished assistant message.
-        // Do NOT call mutate() here: the backend saves the final message in its
-        // finally block, which runs after the final event is yielded. Calling
-        // mutate() immediately races that DB write and replaces the store with
-        // stale data, wiping the reply the user just saw. The Zustand store
-        // already has the correct messages from streaming; SWR reconciles from
-        // the DB on the next natural revalidation (session switch / page reload).
+        // The backend saves the assistant message BEFORE yielding the final
+        // event, so the DB row exists by the time we get here. Calling mutate()
+        // now pulls the persisted messages and replaces the in-memory state,
+        // which means a refresh will always show the full conversation.
         setStreamingText(null);
         if (finalMessage) appendMessage(finalMessage);
+        await mutate();
       } catch (err) {
         if ((err as Error).name !== "AbortError") {
           setStreamingText(null);
@@ -128,6 +126,7 @@ export function useChat(sessionId: string | null) {
     [
       sessionId,
       sending,
+      mutate,
       setSending,
       setStreamingText,
       appendMessage,
