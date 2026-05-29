@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
 from src.config import get_settings
 from src.models.computer import ComputerRecord, ComputerRuntimeState, ComputerStatus
 from src.providers.e2b_provider import E2BDesktopRuntime
 from src.repositories.computer_repository import ComputerRepository
+
+logger = logging.getLogger("ollyuw.computer")
 
 
 def _to_record(row: dict) -> ComputerRecord:
@@ -43,10 +46,9 @@ class ComputerService:
         if not computer.sandbox_id:
             return {"error": "no running sandbox"}
         script = """
-echo "=== template check ===" && ls /usr/local/bin/start-desktop.sh 2>&1 || echo "script missing"
-echo "=== processes ===" && ps aux | grep -E "Xvfb|vnc|websockify|xfce" | grep -v grep || echo "none"
-echo "=== desktop log ===" && cat /tmp/desktop.log 2>/dev/null || echo "no log yet"
-echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no ports"
+echo "=== worker process ===" && (pgrep -af '[a]gent.worker' || echo "WORKER NOT RUNNING")
+echo "=== worker env (channels) ===" && (PID=$(pgrep -f '[a]gent.worker' | head -1); if [ -n "$PID" ]; then tr '\\0' '\\n' < /proc/$PID/environ | grep -E '^SESSION_ID=|^INPUT_STREAM=|^OUTPUT_CHANNEL=|^REDIS_URL=' | sed 's/\\(REDIS_URL=.\\{20\\}\\).*/\\1.../'; else echo "no worker pid"; fi)
+echo "=== worker.log (tail 40) ===" && (tail -40 /tmp/worker.log 2>/dev/null || echo "NO WORKER LOG")
 """.strip()
         result = await _to_thread(self._runtime.run_command, computer.sandbox_id, script)
         return {"sandbox_id": computer.sandbox_id, "output": result}
@@ -110,6 +112,104 @@ echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no p
             workspace_root,
         )
 
+    async def list_workspace_folders(self, user_id: str) -> list[str]:
+        computer = self.get_or_create(user_id)
+        if not computer.sandbox_id:
+            raise ValueError("computer is not running")
+        workspace_root = get_settings().e2b_workspace_path
+        return await _to_thread(
+            self._runtime.list_workspace_folders,
+            computer.sandbox_id,
+            workspace_root,
+        )
+
+    async def apply_mac_look(self, user_id: str) -> str:
+        """Apply the macOS look to the running desktop, then snapshot it.
+
+        Snapshotting right after means the new theme becomes part of the
+        computer's persistent state: every future resume comes up already
+        themed, so this only needs to run once per computer.
+        """
+        computer = self.get_or_create(user_id)
+        if not computer.sandbox_id:
+            raise ValueError("computer is not running")
+
+        output = await _to_thread(self._runtime.apply_mac_look, computer.sandbox_id)
+
+        snapshot_id = await _to_thread(
+            self._runtime.snapshot,
+            computer.sandbox_id,
+            f"computer-{computer.id}-latest",
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        self._computers.update(
+            computer.id,
+            {"snapshot_id": snapshot_id, "last_snapshot_at": now, "last_active": now},
+        )
+        return output
+
+    async def reconnect_runtime(self, user_id: str) -> ComputerRecord:
+        """Ensure the user has a live desktop and return a fresh stream URL.
+
+        Called when the workspace loads. If a sandbox exists we resume it (it
+        may have idle-paused), which is fast and keeps the running worker. If
+        the sandbox is gone but we have a snapshot, we fall back to a full
+        start from that snapshot. If there is nothing to resume, we return the
+        record unchanged so the UI shows the Start button.
+        """
+        computer = self.get_or_create(user_id)
+
+        if not computer.sandbox_id and not computer.snapshot_id:
+            return computer
+
+        if computer.sandbox_id:
+            try:
+                handle = await _to_thread(self._runtime.reconnect, computer.sandbox_id)
+                now = datetime.now(timezone.utc).isoformat()
+                row = self._computers.update(
+                    computer.id,
+                    {
+                        "status": ComputerStatus.ONLINE.value,
+                        "runtime_state": ComputerRuntimeState.RUNNING.value,
+                        "sandbox_id": handle.sandbox_id,
+                        "desktop_host": handle.desktop_host,
+                        "desktop_port": handle.desktop_port,
+                        "desktop_url": handle.desktop_url,
+                        "last_active": now,
+                        "error_message": None,
+                    },
+                )
+                return _to_record(row)
+            except Exception as exc:
+                logger.warning(
+                    "reconnect failed for sandbox %s, recreating from snapshot: %s",
+                    computer.sandbox_id,
+                    exc,
+                )
+
+        # Sandbox is gone (killed, expired) but we have persisted state: do a
+        # full start from the latest snapshot.
+        return await self.start_runtime(user_id)
+
+    async def keepalive(self, user_id: str) -> dict:
+        """Reset the idle timeout so an in-use sandbox does not pause.
+
+        The frontend calls this on an interval while the workspace tab is open.
+        Cheap and best-effort: a failure here just means the next reconnect
+        will resume the sandbox instead.
+        """
+        computer = self.get_or_create(user_id)
+        if not computer.sandbox_id:
+            return {"ok": False, "reason": "no sandbox"}
+        try:
+            await _to_thread(self._runtime.keepalive, computer.sandbox_id)
+            now = datetime.now(timezone.utc).isoformat()
+            self._computers.update(computer.id, {"last_active": now})
+            return {"ok": True}
+        except Exception as exc:
+            logger.warning("keepalive failed for sandbox %s: %s", computer.sandbox_id, exc)
+            return {"ok": False, "reason": str(exc)}
+
     def reset_runtime(self, user_id: str) -> ComputerRecord:
         computer = self.get_or_create(user_id)
         row = self._computers.update(
@@ -146,9 +246,6 @@ echo "=== ports ===" && ss -tlnp 2>/dev/null | grep -E "5901|6080" || echo "no p
                 "OLLYUW_USER_ID": user_id,
                 "REDIS_URL": s.redis_url,
                 "WORKSPACE": s.e2b_workspace_path,
-                "MODAL_TURBO_BASE_URL": s.modal_turbo_base_url,
-                "MODAL_API_KEY": s.modal_api_key,
-                "MODAL_MODEL": s.modal_model,
                 "DEEPSEEK_API_KEY": s.deepseek_api_key,
                 "DEEPSEEK_BASE_URL": s.deepseek_base_url,
                 "DEEPSEEK_MODEL": s.deepseek_model,

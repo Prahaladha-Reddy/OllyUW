@@ -20,7 +20,10 @@ OLLYUW_CONVERSATION_ID: str = os.environ.get("OLLYUW_CONVERSATION_ID", SESSION_I
 REDIS_URL: str       = os.environ["REDIS_URL"]
 INPUT_STREAM: str    = os.environ.get("INPUT_STREAM",    f"agent:{SESSION_ID}:messages")
 OUTPUT_CHANNEL: str  = os.environ.get("OUTPUT_CHANNEL",  f"agent:{SESSION_ID}:chunks")
-HEARTBEAT_KEY: str   = os.environ.get("HEARTBEAT_KEY",   f"agent:{SESSION_ID}:heartbeat")
+HEARTBEAT_KEY: str    = os.environ.get("HEARTBEAT_KEY",    f"agent:{SESSION_ID}:heartbeat")
+# Written when the agent starts processing a message; TTL drives the idle window.
+ACTIVITY_KEY: str     = os.environ.get("ACTIVITY_KEY",     f"agent:{SESSION_ID}:activity")
+ACTIVITY_TTL: int     = int(os.environ.get("ACTIVITY_TTL", "1200"))  # 20 minutes
 CONSUMER_GROUP: str  = "agent"
 CONSUMER_NAME: str   = f"sandbox-{SESSION_ID}"
 
@@ -31,7 +34,7 @@ STATE_PATH: Path = Path("/home/user/agent_state.json")
 
 
 
-DEFAULT_MODEL: str       = "modal"
+DEFAULT_MODEL: str       = "deepseek"
 HEARTBEAT_INTERVAL: int  = 10        
 MAX_STEPS: int           = 120        # cap on tool-calling iterations per user message
 HISTORY_WINDOW: int      = 24        # most recent N messages handed to the model

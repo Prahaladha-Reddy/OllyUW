@@ -19,6 +19,7 @@ from src.controllers.vault_controller import router as vault_router
 from src.middleware.error_handler import register_error_handlers
 from src.middleware.logging_middleware import LoggingMiddleware
 from src.providers import redis_provider
+from src.services import sandbox_watcher
 
 logger = logging.getLogger("olly.app")
 
@@ -30,9 +31,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         os.environ.setdefault("LANGSMITH_API_KEY", settings.langsmith.api_key)
         os.environ.setdefault("LANGSMITH_ENDPOINT", settings.langsmith.base_url)
         os.environ.setdefault("LANGCHAIN_TRACING_V2", str(settings.langsmith.tracing).lower())
+    await sandbox_watcher.start()
     try:
         yield
     finally:
+        await sandbox_watcher.stop()
         await redis_provider.close_pool()
 
 

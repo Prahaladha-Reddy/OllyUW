@@ -17,3 +17,8 @@ second_computer_build_plan.md
 second_computer.md
 inspiration_os_projects
 pytest_cache/
+frontend/dist/
+frontend/node_modules/
+frontend/.env
+.next/
+out/

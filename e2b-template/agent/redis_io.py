@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import socket
 from typing import Any
 
 import redis
 
 from agent.config import (
+    ACTIVITY_KEY,
+    ACTIVITY_TTL,
     CONSUMER_GROUP,
     HEARTBEAT_INTERVAL,
     HEARTBEAT_KEY,
@@ -15,14 +18,31 @@ from agent.config import (
     SESSION_ID,
 )
 
-# Long-lived consumer against a managed Redis (Upstash over TLS): keep the
-# connection warm and let redis-py reconnect transparently after an idle drop.
-# socket_timeout stays unset (None) so blocking XREADGROUP reads wait for the
-# server-side BLOCK window instead of tripping a client-side socket timeout.
+# TCP keepalive intervals. Without these, socket_keepalive=True alone uses the
+# OS default idle time (~2 hours on Linux) before probing a silent peer. When
+# the sandbox idle-pauses and later resumes, the socket to Upstash is silently
+# dead; with these intervals the kernel detects it in ~1 minute (30s idle, then
+# 3 probes 10s apart) and the next blocking read fails fast so we reconnect,
+# instead of the worker hanging forever in xreadgroup. Linux-only constants, so
+# probe for them defensively.
+_KEEPALIVE_INTERVALS = {"TCP_KEEPIDLE": 30, "TCP_KEEPINTVL": 10, "TCP_KEEPCNT": 3}
+_KEEPALIVE_OPTS: dict[int, int] = {}
+for _name, _secs in _KEEPALIVE_INTERVALS.items():
+    _const = getattr(socket, _name, None)
+    if _const is not None:
+        _KEEPALIVE_OPTS[_const] = _secs
+
+# Long-lived consumer against a managed Redis (Upstash over TLS).
+# socket_timeout MUST stay larger than the worker's XREADGROUP BLOCK window
+# (5s, set in worker.py): a healthy blocking read returns well within 10s, but
+# a half-open socket (post-resume) trips the timeout and our retry loop
+# reconnects instead of hanging on a dead connection.
 _client: redis.Redis = redis.Redis.from_url(
     REDIS_URL,
     decode_responses=True,
     socket_keepalive=True,
+    socket_keepalive_options=_KEEPALIVE_OPTS or None,
+    socket_timeout=10,
     health_check_interval=30,
     retry_on_timeout=True,
 )
@@ -48,6 +68,17 @@ def heartbeat() -> None:
     _client.set(HEARTBEAT_KEY, "1", ex=HEARTBEAT_INTERVAL * 3)
 
 
+def touch_activity() -> None:
+    """Mark the sandbox as recently active.
+
+    Called when the worker begins processing a message. The backend watcher
+    extends the E2B sandbox timeout only while this key exists. TTL = 20 min,
+    so after the last message finishes and no new ones arrive, the key expires
+    and the watcher stops extending, letting E2B idle-pause the sandbox.
+    """
+    _client.set(ACTIVITY_KEY, "1", ex=ACTIVITY_TTL)
+
+
 def ensure_consumer_group() -> None:
     """Create the agent consumer group on the input stream if it doesn't exist."""
     try:
@@ -60,3 +91,15 @@ def ensure_consumer_group() -> None:
 def client() -> redis.Redis:
     """Hand the raw client out to the main loop's xreadgroup."""
     return _client
+
+
+def reconnect() -> None:
+    """Drop all pooled connections so the next command dials a fresh socket.
+
+    Called by the worker after a read error (e.g. the post-resume dead socket)
+    so recovery does not depend on redis-py's internal retry heuristics.
+    """
+    try:
+        _client.connection_pool.disconnect()
+    except Exception:
+        pass
