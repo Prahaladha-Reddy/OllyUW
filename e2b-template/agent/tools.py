@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 try:
     from agent.safety.injection_scanner import sanitize_for_model as _sanitize_for_model
-except ImportError:  
+except ImportError:
     from safety.injection_scanner import sanitize_for_model as _sanitize_for_model
 
 WORKSPACE = Path("/home/user/workspace").resolve()

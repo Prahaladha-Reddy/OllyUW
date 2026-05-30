@@ -47,7 +47,10 @@ class LocalRuntime:
         return _local_handle()
 
     def reconnect(self, sandbox_id: str) -> ComputerRuntimeHandle:
-        # Worker is already running locally; just return the handle.
+        # If the worker process is gone (backend restart, crash), raise so
+        # computer_service falls back to start_runtime and relaunches it.
+        if _worker_process is None or _worker_process.poll() is not None:
+            raise RuntimeError("local agent worker is not running")
         return _local_handle()
 
     def pause(self, sandbox_id: str) -> None:

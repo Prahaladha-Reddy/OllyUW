@@ -8,115 +8,20 @@ from typing import Any
 
 from agent.config import TOOL_SPECS
 from agent.events import MODEL_END, MODEL_START, TEXT_DELTA
-from agent.llm.messages import (
-    build_langchain,
-    build_openai,
-    chunk_text,
-    obj_field,
-)
+from agent.llm.messages import build_openai, obj_field
 from agent.llm.providers import normalise_base_url, resolve
 from agent.log import log, preview
-from agent.observability.langfuse_setup import callback_handler, openai_module
+from agent.observability.langfuse_setup import openai_module
 from agent.redis_io import publish
-
 
 
 def step(
     messages: list[dict[str, Any]], model: str, step_num: int, emit_text: bool = True,
 ) -> dict[str, Any]:
-    """Dispatch to the right provider's streaming loop."""
+    """Run a single model step: send messages, stream the response, return parsed result."""
     base_url, api_key, model_name = resolve(model)
     base_url = normalise_base_url(base_url)
 
-    if model == "deepseek":
-        return _step_deepseek(messages, model, step_num, base_url, api_key, model_name, emit_text)
-    return _step_langchain(messages, model, step_num, base_url, api_key, model_name, emit_text)
-
-
-
-def _step_langchain(
-    messages: list[dict[str, Any]],
-    model: str,
-    step_num: int,
-    base_url: str,
-    api_key: str,
-    model_name: str,
-    emit_text: bool,
-) -> dict[str, Any]:
-    from langchain_openai import ChatOpenAI
-
-    log.info(
-        "step=%d model=%s base_url=%s history_len=%d",
-        step_num, model, base_url, len(messages),
-    )
-    if log.isEnabledFor(logging.DEBUG):
-        for i, m in enumerate(messages[-6:]):
-            log.debug("  history[-%d] role=%s preview=%s",
-                      len(messages[-6:]) - i, m.get("role"), preview(m.get("content")))
-
-    llm = ChatOpenAI(
-        model=model_name,
-        base_url=base_url,
-        api_key=api_key,
-        temperature=0,
-        timeout=180,
-        max_retries=1,
-        streaming=True,
-    ).bind_tools(TOOL_SPECS)
-
-    callbacks = callback_handler()
-    lc_config: Any = (
-        {"callbacks": callbacks, "metadata": {"model": model, "step": step_num}}
-        if callbacks else None
-    )
-
-    publish({"type": MODEL_START, "model": model})
-
-    content_parts: list[str] = []
-    tc_acc: dict[int, dict[str, str]] = {}
-    chunks_seen = 0
-    text_chunks_seen = 0
-    t_start = time.monotonic()
-
-    try:
-        for chunk in llm.stream(build_langchain(messages, model), config=lc_config):
-            chunks_seen += 1
-
-            text = chunk_text(chunk)
-            if text:
-                text_chunks_seen += 1
-                content_parts.append(text)
-                if emit_text:
-                    publish({"type": TEXT_DELTA, "text": text})
-
-            for tcc in (getattr(chunk, "tool_call_chunks", None) or []):
-                idx = tcc.get("index") or 0
-                slot = tc_acc.setdefault(idx, {"id": "", "name": "", "args": ""})
-                if tcc.get("id"):
-                    slot["id"] = tcc["id"]
-                if tcc.get("name"):
-                    slot["name"] = tcc["name"]
-                if tcc.get("args"):
-                    slot["args"] = slot["args"] + tcc["args"]
-    except Exception:
-        log.exception("model stream failed at step=%d model=%s", step_num, model)
-        publish({"type": MODEL_END, "model": model, "error": True})
-        raise
-
-    return _finalise(model, step_num, t_start, chunks_seen, text_chunks_seen,
-                     content_parts, tc_acc, reasoning_buf="")
-
-
-
-def _step_deepseek(
-    messages: list[dict[str, Any]],
-    model: str,
-    step_num: int,
-    base_url: str,
-    api_key: str,
-    model_name: str,
-    emit_text: bool,
-) -> dict[str, Any]:
     # Use the Langfuse-aware openai shim when Langfuse is configured;
     # falls back to plain openai otherwise.
     OpenAI = openai_module().OpenAI
@@ -145,8 +50,6 @@ def _step_deepseek(
             model=model_name,
             messages=build_openai(messages, model),
             tools=TOOL_SPECS,
-            temperature=0,
-            timeout=180,
             stream=True,
         )
         for chunk in stream:
@@ -187,7 +90,6 @@ def _step_deepseek(
 
     return _finalise(model, step_num, t_start, chunks_seen, text_chunks_seen,
                      content_parts, tc_acc, reasoning_buf="".join(reasoning_parts))
-
 
 
 def _finalise(

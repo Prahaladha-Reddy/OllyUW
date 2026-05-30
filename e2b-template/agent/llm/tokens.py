@@ -4,8 +4,7 @@ import functools
 
 
 TOKEN_BUDGETS: dict[str, int] = {
-    "modal":    190_000,   
-    "deepseek":  900_000,   
+    "deepseek":  900_000,
 }
 DEFAULT_BUDGET = 50_000
 

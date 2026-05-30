@@ -22,3 +22,4 @@ frontend/node_modules/
 frontend/.env
 .next/
 out/
+local_workspace/*

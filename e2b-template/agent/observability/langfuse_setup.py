@@ -24,6 +24,7 @@ def _langfuse():
         log.info("langfuse disabled (no LANGFUSE_PUBLIC_KEY/SECRET_KEY)")
         return None
     try:
+        # pyrefly: ignore [missing-import]
         from langfuse import Langfuse
 
         return Langfuse()
@@ -40,19 +41,6 @@ def _trace_metadata() -> dict[str, Any]:
         "tags":       ["ollyuw", os.environ.get("OLLYUW_PROJECT_ID", "default")],
     }
 
-
-def callback_handler() -> list[Any]:
-    """Return a list with a Langfuse CallbackHandler, or [] if disabled."""
-    client = _langfuse()
-    if client is None:
-        return []
-    try:
-        from langfuse.langchain import CallbackHandler
-
-        return [CallbackHandler(langfuse_client=client)]
-    except Exception:
-        log.exception("langfuse CallbackHandler init failed")
-        return []
 
 
 def openai_module():
