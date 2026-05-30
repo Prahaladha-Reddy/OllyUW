@@ -76,6 +76,12 @@ class SessionService:
 
         elapsed = 0.0
 
+        # Ordered parts array — built as events arrive so the full interleaving
+        # (text before tool A, tool A+result, text between, tool B+result, text after)
+        # is captured exactly. Saved to DB on the final event.
+        parts: list[dict] = []
+        current_text: str = ""
+
         try:
             while elapsed < _MAX_STREAM_SECONDS:
                 msg = await pubsub.get_message(
@@ -84,7 +90,6 @@ class SessionService:
                 )
                 if msg is None:
                     elapsed += _POLL_TIMEOUT
-                    # Yield an SSE comment to keep the connection alive.
                     yield {"type": "_keepalive"}
                     continue
 
@@ -93,11 +98,46 @@ class SessionService:
                 except (json.JSONDecodeError, KeyError):
                     continue
 
-                is_final = event.get("type") == "final"
+                event_type = event.get("type")
+
+                if event_type == "text_delta":
+                    current_text += event.get("text", "")
+
+                elif event_type == "tool_call":
+                    # Flush buffered text before this tool call so ordering is preserved.
+                    if current_text:
+                        parts.append({"type": "text", "text": current_text})
+                        current_text = ""
+                    parts.append({
+                        "type": "tool_call",
+                        "id":   event.get("id"),
+                        "tool": event.get("tool"),
+                        "args": event.get("args", {}),
+                    })
+
+                elif event_type == "tool_result":
+                    parts.append({
+                        "type":   "tool_result",
+                        "id":     event.get("id"),
+                        "tool":   event.get("tool"),
+                        "ok":     event.get("ok", True),
+                        "output": event.get("output"),
+                    })
+
+                is_final = event_type == "final"
 
                 if is_final:
-                    # Save to DB BEFORE yielding so the row already exists by the
-                    # time the client receives this event and re-fetches messages.
+                    # Flush any trailing text after the last tool call.
+                    if current_text:
+                        parts.append({"type": "text", "text": current_text})
+                        current_text = ""
+                    # If no events produced parts at all, fall back to the final text.
+                    if not parts and event.get("text"):
+                        parts.append({"type": "text", "text": event["text"]})
+
+                    # Save to DB BEFORE yielding so the row exists when the client
+                    # re-fetches. parts carries the full ordered structure including
+                    # tool outputs; content is kept for backward-compat queries.
                     try:
                         self._sessions.add_message(
                             session_id,
@@ -106,8 +146,12 @@ class SessionService:
                             event.get("text", ""),
                             model=event.get("model"),
                             citations=event.get("citations"),
+                            parts=parts or None,
                         )
-                        logger.info("saved assistant message session=%s", session_id)
+                        logger.info(
+                            "saved assistant message session=%s parts=%d",
+                            session_id, len(parts),
+                        )
                     except Exception as exc:
                         logger.warning("failed to save assistant message: %s", exc)
 

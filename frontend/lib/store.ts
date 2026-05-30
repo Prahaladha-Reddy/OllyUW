@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Computer, Session, Message } from "@/types";
+import type { Computer, Session, Message, LiveItem } from "@/types";
 
 // ---- Computer store ----
 
@@ -49,27 +49,55 @@ export const useSessionStore = create<SessionState>((set) => ({
 
 interface ChatState {
   messages: Message[];
-  streamingText: string | null;
+  liveItems: LiveItem[];
   sending: boolean;
   setMessages: (m: Message[]) => void;
   appendMessage: (m: Message) => void;
-  setStreamingText: (t: string | null) => void;
-  appendStreamingText: (chunk: string) => void;
   setSending: (v: boolean) => void;
+  // Append a text chunk — merges into the last text item if one is already at the tail.
+  pushTextChunk: (chunk: string) => void;
+  // Add a new tool call item (status=running).
+  pushToolCall: (item: Extract<LiveItem, { kind: "tool" }>) => void;
+  // Merge updates into an existing tool item by id (used for tool_result).
+  updateToolCall: (id: string, updates: Partial<Extract<LiveItem, { kind: "tool" }>>) => void;
+  clearLiveItems: () => void;
+  // After streaming ends, text is now in messages — drop text items, keep tool chips.
+  stripTextItems: () => void;
   clearForSession: () => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
-  streamingText: null,
+  liveItems: [],
   sending: false,
   setMessages: (messages) => set({ messages }),
   appendMessage: (m) => set((state) => ({ messages: [...state.messages, m] })),
-  setStreamingText: (streamingText) => set({ streamingText }),
-  appendStreamingText: (chunk) =>
-    set((state) => ({ streamingText: (state.streamingText ?? "") + chunk })),
   setSending: (sending) => set({ sending }),
-  clearForSession: () => set({ messages: [], streamingText: null, sending: false }),
+  pushTextChunk: (chunk) =>
+    set((state) => {
+      const items = state.liveItems;
+      const last = items[items.length - 1];
+      if (last?.kind === "text") {
+        const updated = [...items];
+        updated[updated.length - 1] = { ...last, text: last.text + chunk };
+        return { liveItems: updated };
+      }
+      return {
+        liveItems: [...items, { kind: "text", id: `txt-${Date.now()}`, text: chunk }],
+      };
+    }),
+  pushToolCall: (item) =>
+    set((state) => ({ liveItems: [...state.liveItems, item] })),
+  updateToolCall: (id, updates) =>
+    set((state) => ({
+      liveItems: state.liveItems.map((item) =>
+        item.kind === "tool" && item.id === id ? { ...item, ...updates } : item
+      ),
+    })),
+  clearLiveItems: () => set({ liveItems: [] }),
+  stripTextItems: () =>
+    set((state) => ({ liveItems: state.liveItems.filter((i) => i.kind === "tool") })),
+  clearForSession: () => set({ messages: [], liveItems: [], sending: false }),
 }));
 
 // ---- UI store ----

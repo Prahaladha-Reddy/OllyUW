@@ -7,7 +7,7 @@ class SessionRepository:
     def __init__(self, db: Client) -> None:
         self._db = db
         self._session_cols = "id, user_id, computer_id, title, created_at, updated_at"
-        self._message_cols = "id, session_id, user_id, role, content, model, citations, created_at"
+        self._message_cols = "id, session_id, user_id, role, content, model, citations, parts, created_at"
 
     def list_by_user(self, user_id: str) -> list[dict]:
         result = (
@@ -62,6 +62,7 @@ class SessionRepository:
         content: str,
         model: str | None = None,
         citations: list | None = None,
+        parts: list | None = None,
     ) -> dict:
         row: dict = {
             "session_id": session_id,
@@ -73,6 +74,8 @@ class SessionRepository:
             row["model"] = model
         if citations:
             row["citations"] = citations
+        if parts:
+            row["parts"] = parts
         result = (
             self._db.table("session_messages")
             .insert(row)

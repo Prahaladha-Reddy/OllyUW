@@ -30,6 +30,11 @@ export interface Session {
   updated_at: string;
 }
 
+export type MessagePart =
+  | { type: "text"; text: string }
+  | { type: "tool_call"; id: string; tool: string; args: Record<string, unknown> }
+  | { type: "tool_result"; id: string; tool: string; ok: boolean; output: string | null };
+
 export interface Message {
   id: string;
   session_id: string;
@@ -38,6 +43,7 @@ export interface Message {
   content: string;
   model: string | null;
   citations: unknown[] | null;
+  parts: MessagePart[] | null;
   created_at: string;
 }
 
@@ -45,6 +51,7 @@ export type SSEEventType =
   | "ready"
   | "status"
   | "tool_call"
+  | "tool_result"
   | "text_delta"
   | "final"
   | "error"
@@ -59,4 +66,19 @@ export interface SSEEvent {
   model?: string;
   citations?: unknown[];
   created_at?: string;
+  tool?: string;
+  args?: Record<string, unknown>;
+  ok?: boolean;
+  output?: string;
 }
+
+export type LiveItem =
+  | { kind: "text"; id: string; text: string }
+  | {
+      kind: "tool";
+      id: string;
+      tool: string;
+      args: Record<string, unknown>;
+      status: "running" | "done" | "error";
+      output?: string;
+    };
