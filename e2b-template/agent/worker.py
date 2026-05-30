@@ -1,12 +1,18 @@
+"""
+Async worker — Redis message loop → agent_loop.process_message.
+
+The outer loop is synchronous (redis-py's xreadgroup is blocking);
+process_message is async and runs in an asyncio event loop per message.
+"""
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
-from agent import tools as _tools
 from agent.agent_loop import process_message
 from agent.config import (
     CONSUMER_GROUP,
@@ -21,10 +27,7 @@ from agent.config import (
 from agent.events import ERROR, MESSAGE_ACKED, MESSAGE_RECEIVED, WORKER_READY
 from agent.log import log
 from agent.redis_io import client as redis_client
-from agent.redis_io import ensure_consumer_group, heartbeat, publish, reconnect, touch_activity
-
-
-_tools.WORKSPACE = WORKSPACE
+from agent.redis_io import ensure_consumer_group, heartbeat, publish_sync as publish, reconnect, touch_activity
 
 
 def main() -> None:
@@ -54,10 +57,6 @@ def main() -> None:
                 block=5000,
             )
         except (RedisTimeoutError, RedisConnectionError) as exc:
-            # A blocking read can time out, or the managed Redis can drop an
-            # idle connection (notably after the sandbox pauses and resumes,
-            # which silently kills the socket). Neither is fatal: drop the dead
-            # connection so the next iteration dials a fresh one, then retry.
             log.warning("redis read interrupted, reconnecting: %s", exc)
             reconnect()
             time.sleep(1)
@@ -77,21 +76,26 @@ def _handle_entry(r, message_id: str, fields: dict) -> None:
     try:
         raw = fields.get("data", "{}")
         payload = json.loads(raw)
-        user_text = str(payload.get("message", ""))
-        model = str(payload.get("model") or DEFAULT_MODEL)
+        user_text  = str(payload.get("message", ""))
+        model      = str(payload.get("model") or DEFAULT_MODEL)
         session_id = str(payload.get("session_id") or SESSION_ID)
+
         log.info("message_received id=%s model=%s session=%s len=%d",
                  message_id, model, session_id, len(user_text))
         touch_activity()
         publish({"type": MESSAGE_RECEIVED, "message_id": message_id, "model": model})
-        process_message(user_text, model, session_id=session_id)
+
+        # Run the async loop for this message.
+        asyncio.run(process_message(user_text, model, session_id=session_id))
+
         r.xack(INPUT_STREAM, CONSUMER_GROUP, message_id)
         publish({"type": MESSAGE_ACKED, "message_id": message_id})
+
     except Exception as exc:
         log.exception("failed to process message id=%s", message_id)
         publish({
-            "type": ERROR,
-            "text": f"{type(exc).__name__}: {exc}",
+            "type":       ERROR,
+            "text":       f"{type(exc).__name__}: {exc}",
             "message_id": message_id,
         })
         r.xack(INPUT_STREAM, CONSUMER_GROUP, message_id)

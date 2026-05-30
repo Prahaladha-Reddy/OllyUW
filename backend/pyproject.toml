@@ -25,6 +25,8 @@ dependencies = [
     "mem0ai>=2.0.4",
     "parallel-web>=0.6.0",
     "langfuse>=4.7.1",
+    "pyyaml>=6.0.3",
+    "aiohttp>=3.13.5",
 ]
 
 [project.optional-dependencies]

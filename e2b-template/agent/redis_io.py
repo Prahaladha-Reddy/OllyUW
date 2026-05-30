@@ -50,17 +50,22 @@ _seq: int = 0
 
 
 def publish(event: dict[str, Any]) -> None:
-    """
-    Send a single event on OUTPUT_CHANNEL. We stamp every event with the
-    session_id (so a subscriber listening to many sessions can demux) and
-    a monotonic `seq` (so the frontend can detect dropped or reordered
-    deliveries).
-    """
+    """Send a single event on OUTPUT_CHANNEL (sync, safe to call from any thread)."""
     global _seq
     _seq += 1
     event.setdefault("session_id", SESSION_ID)
     event["seq"] = _seq
     _client.publish(OUTPUT_CHANNEL, json.dumps(event, ensure_ascii=False))
+
+
+# Alias — used by streaming.py which is called from asyncio.to_thread contexts.
+publish_sync = publish
+
+
+async def publish_async(event: dict[str, Any]) -> None:
+    """Async wrapper — runs publish_sync in a thread to avoid blocking the loop."""
+    import asyncio
+    await asyncio.to_thread(publish_sync, event)
 
 
 def heartbeat() -> None:

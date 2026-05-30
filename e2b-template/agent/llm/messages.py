@@ -3,12 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from agent.config import SYSTEM_PROMPT
 from agent.llm.compaction import recent_within_budget
 
 
 def build_openai(messages: list[dict[str, Any]], model: str = "deepseek") -> list[dict[str, Any]]:
     """Translate history into raw OpenAI Chat Completions dicts."""
+    from agent.config import SYSTEM_PROMPT
     chat: list[dict[str, Any]] = [{"role": "system", "content": SYSTEM_PROMPT}]
     for m in recent_within_budget(messages, model):
         role = m.get("role", "")
@@ -27,24 +27,23 @@ def build_openai(messages: list[dict[str, Any]], model: str = "deepseek") -> lis
             chat.append(item)
         elif role == "tool":
             chat.append({
-                "role": "tool",
+                "role":         "tool",
                 "tool_call_id": m.get("tool_call_id", ""),
-                "content": content,
+                "content":      content,
             })
     return chat
 
 
 def _to_openai_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert our compact tool-call dicts into the OpenAI wire format."""
-    out: list[dict[str, Any]] = []
+    out = []
     for call in calls:
         args = call.get("args") or {}
         arguments = args if isinstance(args, str) else json.dumps(args, ensure_ascii=False)
         out.append({
-            "id": call.get("id", ""),
+            "id":   call.get("id", ""),
             "type": "function",
             "function": {
-                "name": call.get("name", ""),
+                "name":      call.get("name", ""),
                 "arguments": arguments,
             },
         })
@@ -52,11 +51,7 @@ def _to_openai_tool_calls(calls: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def obj_field(obj: Any, key: str, default: Any = None) -> Any:
-    """
-    Generic accessor that works whether `obj` is a dict, a pydantic model,
-    or a plain SDK object. Used to read fields off raw OpenAI streaming
-    chunks without caring which library's response objects we got back.
-    """
+    """Generic accessor for dict, pydantic model, or plain SDK object."""
     if obj is None:
         return default
     if isinstance(obj, dict):

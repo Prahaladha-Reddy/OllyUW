@@ -136,11 +136,13 @@ def _launch_worker(env: dict[str, str], workspace: Path) -> None:
         return
 
     _worker_env = env
+    sessions_dir = workspace / "sessions"
     worker_env = {
         **os.environ,
         **env,
-        "WORKSPACE": str(workspace),
-        "AGENT_STATE_PATH": str(workspace / ".agent_state.json"),
+        "WORKSPACE":        str(workspace),
+        "SESSIONS_DIR":     str(sessions_dir),
+        "AGENT_STATE_PATH": str(sessions_dir / env.get("SESSION_ID", "local") / "agent_state.json"),
     }
 
     log_path = workspace / "worker.log"

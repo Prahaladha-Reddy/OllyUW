@@ -1,0 +1,15 @@
+# Core
+openai>=1.0.0
+redis>=4.0.0
+python-dotenv>=1.0.0
+langfuse>=2.0.0
+
+# New dependencies
+pyyaml>=6.0      # subagents/runner.py — YAML definition files
+aiohttp>=3.9.0   # subagents/browser/agent.py — BrowserOS MCP HTTP calls
+
+# Browser (install when setting up BrowserOS inside E2B)
+# browseros
+
+# Optional: Composio for app integrations
+# composio-core
