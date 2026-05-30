@@ -79,11 +79,12 @@ def _handle_entry(r, message_id: str, fields: dict) -> None:
         payload = json.loads(raw)
         user_text = str(payload.get("message", ""))
         model = str(payload.get("model") or DEFAULT_MODEL)
-        log.info("message_received id=%s model=%s len=%d",
-                 message_id, model, len(user_text))
+        session_id = str(payload.get("session_id") or SESSION_ID)
+        log.info("message_received id=%s model=%s session=%s len=%d",
+                 message_id, model, session_id, len(user_text))
         touch_activity()
         publish({"type": MESSAGE_RECEIVED, "message_id": message_id, "model": model})
-        process_message(user_text, model)
+        process_message(user_text, model, session_id=session_id)
         r.xack(INPUT_STREAM, CONSUMER_GROUP, message_id)
         publish({"type": MESSAGE_ACKED, "message_id": message_id})
     except Exception as exc:

@@ -5,7 +5,7 @@ import traceback
 from typing import Any
 
 from agent import tools as _tools
-from agent.config import DEFAULT_MODEL, MAX_STEPS, WORKSPACE
+from agent.config import DEFAULT_MODEL, MAX_STEPS, SESSION_ID, WORKSPACE
 from agent.events import (
     FINAL,
     STATUS,
@@ -23,18 +23,24 @@ from agent.state import load as load_state
 from agent.state import save as save_state
 
 
-def process_message(user_text: str, model: str = DEFAULT_MODEL) -> None:
-    log.info("process_message model=%s text=%s", model, preview(user_text, 120))
+def process_message(user_text: str, model: str = DEFAULT_MODEL, session_id: str = SESSION_ID) -> None:
+    log.info("process_message model=%s session=%s text=%s", model, session_id, preview(user_text, 120))
+
+    from pathlib import Path
+    state_path = Path(f"/home/user/sessions/{session_id}/agent_state.json")
 
     model_user_text, input_scan = _sanitize_for_model(user_text, source="user_message")
     if input_scan.flagged:
         log.warning("input_wrapped threat=%s", input_scan.summary())
 
-    messages = load_state()
+    messages = load_state(state_path)
     messages.append({"role": "user", "content": model_user_text})
     publish({"type": STATUS, "text": "Processing message", "model": model})
 
     transcript: list[str] = []
+    # Accumulate every tool call across all steps so we can embed them in the
+    # final event. The frontend saves them to DB for persistent display.
+    all_tool_calls: list[dict] = []
     repair_attempts = 0
 
     for step_idx in range(MAX_STEPS):
@@ -68,7 +74,7 @@ def process_message(user_text: str, model: str = DEFAULT_MODEL) -> None:
                     })
                     messages.append({"role": "assistant", "content": full_text})
                     messages.append({"role": "user", "content": _validation_feedback(validation)})
-                    save_state(messages)
+                    save_state(messages, state_path)
                     transcript = []
                     continue
 
@@ -81,7 +87,7 @@ def process_message(user_text: str, model: str = DEFAULT_MODEL) -> None:
                 )
 
             messages.append({"role": "assistant", "content": full_text})
-            save_state(messages)
+            save_state(messages, state_path)
 
             _mem0_add(user_text, full_text)
             _langfuse_flush()
@@ -93,8 +99,18 @@ def process_message(user_text: str, model: str = DEFAULT_MODEL) -> None:
                 "text": full_text,
                 "model": model,
                 "citations": [citation.__dict__ for citation in validation.citations],
+                "tool_calls": all_tool_calls or None,
             })
             return
+
+        # Record these calls before appending to messages so the accumulator
+        # holds the clean {id, name, args} form (not the full message dict).
+        for call in turn["calls"]:
+            all_tool_calls.append({
+                "id":   call["id"],
+                "tool": call["name"],
+                "args": call["args"],
+            })
 
         messages.append({
             "role":              "assistant",
@@ -106,14 +122,14 @@ def process_message(user_text: str, model: str = DEFAULT_MODEL) -> None:
         for call in turn["calls"]:
             _execute_tool_call(call, messages)
 
-        save_state(messages)
+        save_state(messages, state_path)
 
     # Hit MAX_STEPS without final.
     stop_msg = f"Reached max steps ({MAX_STEPS}). Ask me to continue if needed."
     transcript.append(stop_msg)
     full_text = "\n\n".join(s.strip() for s in transcript if s.strip())
     messages.append({"role": "assistant", "content": full_text})
-    save_state(messages)
+    save_state(messages, state_path)
     log.warning("hit MAX_STEPS=%d for model=%s", MAX_STEPS, model)
     publish({"type": FINAL, "text": full_text, "model": model})
 

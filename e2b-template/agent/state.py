@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from agent.config import HISTORY_WINDOW, STATE_PATH
 from agent.log import log
 
 
-def load() -> list[dict[str, Any]]:
+def load(path: Path = STATE_PATH) -> list[dict[str, Any]]:
     """Read messages from agent_state.json. Tolerates missing/corrupt files."""
-    if not STATE_PATH.exists():
+    if not path.exists():
         return []
     try:
-        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         messages = data.get("messages", [])
         return messages if isinstance(messages, list) else []
     except (json.JSONDecodeError, OSError) as exc:
@@ -20,9 +21,10 @@ def load() -> list[dict[str, Any]]:
         return []
 
 
-def save(messages: list[dict[str, Any]]) -> None:
+def save(messages: list[dict[str, Any]], path: Path = STATE_PATH) -> None:
     """Persist messages to agent_state.json (pretty-printed for debuggability)."""
-    STATE_PATH.write_text(
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
         json.dumps({"messages": messages}, indent=2, ensure_ascii=False),
         encoding="utf-8",
     )
