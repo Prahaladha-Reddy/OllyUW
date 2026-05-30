@@ -30,7 +30,7 @@ CONSUMER_NAME: str   = f"sandbox-{SESSION_ID}"
 
 
 WORKSPACE: Path  = Path(os.environ.get("WORKSPACE", "/home/user/workspace")).resolve()
-STATE_PATH: Path = Path("/home/user/agent_state.json")
+STATE_PATH: Path = Path(os.environ.get("AGENT_STATE_PATH", "/home/user/agent_state.json"))
 
 
 

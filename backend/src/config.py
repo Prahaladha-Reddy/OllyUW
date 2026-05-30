@@ -84,7 +84,10 @@ class ServerGroup:
 
 
 class Settings(BaseSettings):
-    e2b_api_key: str
+    use_local_agent: bool = False
+    local_workspace_path: str = str(ROOT / "local_workspace")
+
+    e2b_api_key: str = ""
     e2b_template_id: str = "base"
     e2b_desktop_template_id: str = "desktop"
     e2b_sandbox_timeout: int = 1200
