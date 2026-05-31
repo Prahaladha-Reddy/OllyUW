@@ -55,7 +55,9 @@ export type SSEEventType =
   | "text_delta"
   | "final"
   | "error"
-  | "_keepalive";
+  | "_keepalive"
+  | "subagent_start"
+  | "subagent_done";
 
 export interface SSEEvent {
   type: SSEEventType;
@@ -70,6 +72,13 @@ export interface SSEEvent {
   args?: Record<string, unknown>;
   ok?: boolean;
   output?: string;
+  // Subagent fields — present on tool_call/tool_result and subagent_start/done events
+  subagent_id?: string;
+  subagent_label?: string;
+  goal?: string;
+  toolsets?: string[];
+  success?: boolean;
+  summary?: string;
 }
 
 export type LiveItem =

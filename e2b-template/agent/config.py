@@ -83,11 +83,25 @@ Do not make sequential calls when parallel calls work.
 
 ## Subagents (delegate tool)
 
-Use delegate() for browser automation, app integrations, or parallelising heavy research.
-- agent: "browser" → BrowserOS + MiMo vision model (for web tasks needing real navigation)
-- agent: any YAML-defined agent name
-- Subagents run in parallel by default. They have isolated contexts — pass ONLY what they need.
-- Depth limit: 1. Subagents cannot spawn further subagents.
+delegate() spawns parallel workers with isolated context windows — like Hermes.
+No predefined types. Just specify what tools each worker gets:
+
+  toolsets: ["web"]               → web_search + web_research only
+  toolsets: ["file", "shell"]     → file ops + shell commands
+  toolsets: ["all"]               → everything
+  toolsets: ["browser"]           → BrowserOS + MiMo vision (real browser automation)
+
+Examples:
+  delegate(tasks=[
+    {"goal": "Research X", "context": "focus on Y", "toolsets": ["web"]},
+    {"goal": "Analyse data.csv", "context": "file at workspace/data.csv", "toolsets": ["file", "shell"]},
+  ])
+
+Rules:
+- Subagents have ZERO parent history. Put everything they need in context.
+- They run in parallel by default. Use sequential=true only when output of one feeds the next.
+- Depth=1: subagents cannot spawn subagents.
+- If browser fails (BrowserOS not running), use tool_call("web_search", ...) instead.
 """
 
 

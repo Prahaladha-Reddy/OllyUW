@@ -68,9 +68,14 @@ def _web_research(question: str, timeout: int = 90) -> str:
     return web_research(question, timeout=timeout)
 
 
-def _install_skill(name_or_url: str) -> str:
+def _install_skill(source: str) -> str:
     from agent.skills.installer import install_skill
-    return install_skill(name_or_url)
+    return install_skill(source)
+
+
+def _list_available_skills() -> str:
+    from agent.skills.installer import list_available
+    return list_available()
 
 
 def _init_registry() -> None:
@@ -181,11 +186,20 @@ def _init_registry() -> None:
         ),
         ToolEntry(
             name="install_skill",
-            description="Install a new skill by name or URL. Skills are saved to the catalog and available immediately.",
-            tags=["skill", "install", "add", "download"],
-            schema=_schema("install_skill", "Install a skill from the registry or a URL",
-                [("name_or_url", "string", "Skill name (looked up in registry) or direct URL to a .md file")]),
+            description="Install a skill from GitHub (owner/repo or full URL) or a local path. Skills are installed to /home/user/.agents/skills/ and available immediately.",
+            tags=["skill", "install", "add", "download", "github"],
+            schema=_schema("install_skill", "Install a skill from GitHub or local path",
+                [("source", "string",
+                  "GitHub shorthand (owner/repo or owner/repo/skill-name), "
+                  "full GitHub URL, or local path to a skill directory")]),
             handler=_install_skill,
+        ),
+        ToolEntry(
+            name="list_available_skills",
+            description="List skills available in known public registries (anthropics/skills, vercel-labs/agent-skills).",
+            tags=["skill", "list", "discover", "registry", "available"],
+            schema=_schema("list_available_skills", "List skills in public registries", []),
+            handler=_list_available_skills,
         ),
     ])
 
@@ -300,27 +314,35 @@ CORE_TOOL_SPECS: list[dict] = [
         "function": {
             "name": "delegate",
             "description": (
-                "Spawn one or more subagents to run tasks in parallel. "
-                "Each subagent has its own context window and tool set. "
-                "Available types: 'browser' (BrowserOS + mimo vision), plus any YAML-defined agents. "
-                "Pass only the minimum context each agent needs."
+                "Spawn one or more subagents to work in parallel. Each gets a fresh context — "
+                "pass ALL information it needs in goal and context. "
+                "Toolsets: 'file' (read/write/patch/search), 'shell' (run commands), "
+                "'web' (web_search + web_research), 'all' (everything), "
+                "'browser' (BrowserOS + MiMo vision — for real web navigation). "
+                "Subagents cannot call delegate (depth=1). "
+                "For independent tasks: list them all, they run in parallel. "
+                "For sequential tasks (output of one feeds next): set sequential=true."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "tasks": {
                         "type": "array",
-                        "description": "Tasks to run (in parallel unless sequential=true)",
+                        "description": "Tasks to run",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "agent":         {"type": "string",  "description": "Agent type name (e.g. 'browser')"},
-                                "goal":          {"type": "string",  "description": "What to accomplish"},
-                                "context":       {"type": "object",  "description": "Minimal context the agent needs"},
-                                "return_schema": {"type": "object",  "description": "Expected output structure"},
-                                "sequential":    {"type": "boolean", "description": "If true, run after previous task (use when output feeds next task)"},
+                                "goal":       {"type": "string", "description": "What the subagent must accomplish"},
+                                "context":    {"type": "string", "description": "All context the subagent needs — file paths, data, background. It has no parent history."},
+                                "toolsets":   {
+                                    "type": "array",
+                                    "items": {"type": "string", "enum": ["file", "shell", "web", "all", "browser"]},
+                                    "description": "Tool categories to give this subagent (default: ['file','shell','web'])",
+                                },
+                                "max_turns":  {"type": "integer", "description": "Max tool-calling turns (default 30)"},
+                                "sequential": {"type": "boolean", "description": "If true, run after previous task completes (output injected into context)"},
                             },
-                            "required": ["agent", "goal"],
+                            "required": ["goal"],
                         },
                     },
                 },
@@ -384,7 +406,6 @@ BRIDGE_TOOL_SPECS: list[dict] = [
 ALL_TOOL_SPECS: list[dict] = CORE_TOOL_SPECS + BRIDGE_TOOL_SPECS
 
 
-# ── async dispatcher ──────────────────────────────────────────────────────────
 
 async def dispatch(name: str, args: dict[str, Any]) -> str:
     """Route any tool call by name. Handles both core and bridge tools."""

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 WORKSPACE = Path(os.environ.get("WORKSPACE", "/home/user/workspace")).resolve()
-_TIMEOUT = 60
+_TIMEOUT = 300
 _OUTPUT_LIMIT = 10_000
 
 

@@ -10,6 +10,7 @@ export function useChat(sessionId: string | null) {
   const {
     messages,
     liveItems,
+    subagents,
     sending,
     setMessages,
     appendMessage,
@@ -19,6 +20,10 @@ export function useChat(sessionId: string | null) {
     updateToolCall,
     clearLiveItems,
     clearForSession,
+    pushSubagent,
+    updateSubagent,
+    pushSubagentCall,
+    updateSubagentCall,
   } = useChatStore();
 
   const abortRef = useRef<AbortController | null>(null);
@@ -57,6 +62,7 @@ export function useChat(sessionId: string | null) {
         content: text,
         model: model || null,
         citations: null,
+        parts: null,
         created_at: new Date().toISOString(),
       };
       appendMessage(optimistic);
@@ -74,19 +80,50 @@ export function useChat(sessionId: string | null) {
         for await (const event of streamSession(sessionId, ctrl.signal)) {
           if (event.type === "text_delta") {
             pushTextChunk(event.text ?? "");
-          } else if (event.type === "tool_call") {
-            pushToolCall({
-              kind: "tool",
-              id: event.id ?? crypto.randomUUID(),
-              tool: event.tool ?? "",
-              args: event.args ?? {},
+          } else if (event.type === "subagent_start") {
+            pushSubagent({
+              id: event.subagent_id ?? crypto.randomUUID(),
+              label: event.subagent_label ?? event.subagent_id ?? "agent",
+              goal: event.goal ?? "",
+              toolsets: event.toolsets ?? [],
               status: "running",
+              calls: [],
             });
+          } else if (event.type === "subagent_done") {
+            updateSubagent(event.subagent_id ?? "", {
+              status: event.success ? "done" : "error",
+              summary: event.summary,
+            });
+          } else if (event.type === "tool_call") {
+            if (event.subagent_id) {
+              // Route to subagent panel
+              pushSubagentCall(event.subagent_id, {
+                id: event.id ?? crypto.randomUUID(),
+                tool: event.tool ?? "",
+                args: event.args ?? {},
+                status: "running",
+              });
+            } else {
+              pushToolCall({
+                kind: "tool",
+                id: event.id ?? crypto.randomUUID(),
+                tool: event.tool ?? "",
+                args: event.args ?? {},
+                status: "running",
+              });
+            }
           } else if (event.type === "tool_result") {
-            updateToolCall(event.id ?? "", {
-              status: event.ok ? "done" : "error",
-              output: event.output,
-            });
+            if (event.subagent_id) {
+              updateSubagentCall(event.subagent_id, event.id ?? "", {
+                status: event.ok ? "done" : "error",
+                output: event.output,
+              });
+            } else {
+              updateToolCall(event.id ?? "", {
+                status: event.ok ? "done" : "error",
+                output: event.output,
+              });
+            }
           } else if (event.type === "final") {
             finalMessage = {
               id: event.id ?? crypto.randomUUID(),
@@ -130,8 +167,12 @@ export function useChat(sessionId: string | null) {
       pushTextChunk,
       pushToolCall,
       updateToolCall,
+      pushSubagent,
+      updateSubagent,
+      pushSubagentCall,
+      updateSubagentCall,
     ],
   );
 
-  return { messages, liveItems, sending, send };
+  return { messages, liveItems, subagents, sending, send };
 }

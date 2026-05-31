@@ -45,30 +45,53 @@ export const useSessionStore = create<SessionState>((set) => ({
     })),
 }));
 
+// ── Subagent live state ────────────────────────────────────────────────────
+
+export interface SubagentToolCall {
+  id: string;
+  tool: string;
+  args: Record<string, unknown>;
+  status: "running" | "done" | "error";
+  output?: string;
+}
+
+export interface SubagentLiveItem {
+  id: string;            // == subagent_id from backend
+  label: string;         // e.g. "sa-0 [web]"
+  goal: string;
+  toolsets: string[];
+  status: "running" | "done" | "error";
+  summary?: string;
+  calls: SubagentToolCall[];
+}
+
 // ---- Chat store ----
 
 interface ChatState {
   messages: Message[];
   liveItems: LiveItem[];
+  subagents: SubagentLiveItem[];
   sending: boolean;
   setMessages: (m: Message[]) => void;
   appendMessage: (m: Message) => void;
   setSending: (v: boolean) => void;
-  // Append a text chunk — merges into the last text item if one is already at the tail.
   pushTextChunk: (chunk: string) => void;
-  // Add a new tool call item (status=running).
   pushToolCall: (item: Extract<LiveItem, { kind: "tool" }>) => void;
-  // Merge updates into an existing tool item by id (used for tool_result).
   updateToolCall: (id: string, updates: Partial<Extract<LiveItem, { kind: "tool" }>>) => void;
   clearLiveItems: () => void;
-  // After streaming ends, text is now in messages — drop text items, keep tool chips.
   stripTextItems: () => void;
   clearForSession: () => void;
+  // Subagent actions
+  pushSubagent: (item: SubagentLiveItem) => void;
+  updateSubagent: (id: string, updates: Partial<SubagentLiveItem>) => void;
+  pushSubagentCall: (subagent_id: string, call: SubagentToolCall) => void;
+  updateSubagentCall: (subagent_id: string, call_id: string, updates: Partial<SubagentToolCall>) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   messages: [],
   liveItems: [],
+  subagents: [],
   sending: false,
   setMessages: (messages) => set({ messages }),
   appendMessage: (m) => set((state) => ({ messages: [...state.messages, m] })),
@@ -94,10 +117,31 @@ export const useChatStore = create<ChatState>((set) => ({
         item.kind === "tool" && item.id === id ? { ...item, ...updates } : item
       ),
     })),
-  clearLiveItems: () => set({ liveItems: [] }),
+  clearLiveItems: () => set({ liveItems: [], subagents: [] }),
   stripTextItems: () =>
     set((state) => ({ liveItems: state.liveItems.filter((i) => i.kind === "tool") })),
-  clearForSession: () => set({ messages: [], liveItems: [], sending: false }),
+  clearForSession: () => set({ messages: [], liveItems: [], subagents: [], sending: false }),
+  pushSubagent: (item) =>
+    set((state) => ({ subagents: [...state.subagents, item] })),
+  updateSubagent: (id, updates) =>
+    set((state) => ({
+      subagents: state.subagents.map((s) => s.id === id ? { ...s, ...updates } : s),
+    })),
+  pushSubagentCall: (subagent_id, call) =>
+    set((state) => ({
+      subagents: state.subagents.map((s) =>
+        s.id === subagent_id ? { ...s, calls: [...s.calls, call] } : s
+      ),
+    })),
+  updateSubagentCall: (subagent_id, call_id, updates) =>
+    set((state) => ({
+      subagents: state.subagents.map((s) =>
+        s.id !== subagent_id ? s : {
+          ...s,
+          calls: s.calls.map((c) => c.id === call_id ? { ...c, ...updates } : c),
+        }
+      ),
+    })),
 }));
 
 // ---- UI store ----

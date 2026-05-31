@@ -1,7 +1,3 @@
-"""
-Production-grade file operations.
-Patterns from Aider, SWE-agent, Claude Code.
-"""
 from __future__ import annotations
 
 import ast

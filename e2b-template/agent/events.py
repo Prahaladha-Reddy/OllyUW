@@ -12,3 +12,8 @@ FINAL            = "final"
 MESSAGE_RECEIVED = "message_received"
 MESSAGE_ACKED    = "message_acked"
 ERROR            = "error"
+
+# Subagent lifecycle events — published from runner.py so the frontend
+# can show real-time progress for each parallel subagent.
+SUBAGENT_START   = "subagent_start"   # subagent spawned
+SUBAGENT_DONE    = "subagent_done"    # subagent finished (success or error)

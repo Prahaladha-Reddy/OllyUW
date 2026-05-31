@@ -23,3 +23,6 @@ frontend/.env
 .next/
 out/
 local_workspace/*
+browser_eval/*
+browser_eval/BrowserOS_installer.exe
+browser_eval/*.exe
