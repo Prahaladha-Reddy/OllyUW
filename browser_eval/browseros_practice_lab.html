@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BrowserOS Practice Lab</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 760px; margin: 40px auto; line-height: 1.45; }
+    label { display: block; margin: 14px 0; }
+    input, select, textarea, button { font-size: 16px; padding: 8px; }
+    textarea { width: 100%; min-height: 90px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    #drop-a, #drop-b { border: 1px solid #999; padding: 16px; min-width: 160px; min-height: 54px; }
+    #drag-token { display: inline-block; padding: 8px 12px; background: #eef; border: 1px solid #88a; cursor: grab; }
+    #log { white-space: pre-wrap; background: #f6f6f6; border: 1px solid #ddd; padding: 12px; min-height: 60px; }
+  </style>
+</head>
+<body>
+  <h1>BrowserOS Practice Lab</h1>
+  <p>This page is local and safe. It exists only to exercise BrowserOS controls.</p>
+
+  <label>Name
+    <input id="name" name="name" placeholder="Type a name">
+  </label>
+
+  <label>Email
+    <input id="email" name="email" type="email" placeholder="test@example.com">
+  </label>
+
+  <label>Role
+    <select id="role">
+      <option value="">Select role</option>
+      <option value="ai-agent-engineer">AI Agent Engineer</option>
+      <option value="browser-operator">Browser Operator</option>
+      <option value="researcher">Researcher</option>
+    </select>
+  </label>
+
+  <label>
+    <input id="terms" type="checkbox">
+    I understand this is a local practice form
+  </label>
+
+  <label>Practice file upload
+    <input id="resume" type="file">
+  </label>
+
+  <label>Notes
+    <textarea id="notes" placeholder="Write practice notes"></textarea>
+  </label>
+
+  <div class="row">
+    <button id="submit" type="button">Submit Local Form</button>
+    <button id="alert" type="button">Show Alert</button>
+    <button id="confirm" type="button">Show Confirm</button>
+    <button id="prompt" type="button">Show Prompt</button>
+    <a id="download" download="browseros-practice-download.txt" href="data:text/plain;charset=utf-8,BrowserOS%20practice%20download%20file">Download Test File</a>
+  </div>
+
+  <h2>Drag Practice</h2>
+  <div class="row">
+    <div id="drop-a"><span id="drag-token" draggable="true">Drag token</span></div>
+    <div id="drop-b">Drop target</div>
+  </div>
+
+  <h2>Log</h2>
+  <div id="log">No actions yet.</div>
+
+  <script>
+    const log = document.querySelector('#log');
+    const write = (msg) => { log.textContent = msg; };
+
+    document.querySelector('#submit').addEventListener('click', () => {
+      const file = document.querySelector('#resume').files[0];
+      write(JSON.stringify({
+        name: document.querySelector('#name').value,
+        email: document.querySelector('#email').value,
+        role: document.querySelector('#role').value,
+        terms: document.querySelector('#terms').checked,
+        file: file ? file.name : null,
+        notes: document.querySelector('#notes').value
+      }, null, 2));
+    });
+
+    document.querySelector('#alert').addEventListener('click', () => alert('Practice alert'));
+    document.querySelector('#confirm').addEventListener('click', () => write('confirm=' + confirm('Practice confirm?')));
+    document.querySelector('#prompt').addEventListener('click', () => write('prompt=' + prompt('Practice prompt value?', 'default')));
+
+    document.querySelector('#drop-b').addEventListener('dragover', (event) => event.preventDefault());
+    document.querySelector('#drop-b').addEventListener('drop', (event) => {
+      event.preventDefault();
+      document.querySelector('#drop-b').appendChild(document.querySelector('#drag-token'));
+      write('dragged token to drop target');
+    });
+  </script>
+</body>
+</html>

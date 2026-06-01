@@ -1,0 +1,202 @@
+[
+  {
+    "source": "webvoyager",
+    "web_name": "Allrecipes",
+    "start_url": "https://www.allrecipes.com/",
+    "description": "Provide a recipe for vegetarian lasagna with more than 100 reviews and a rating of at least 4.5 stars suitable for 6 people.",
+    "reference": [],
+    "id": 1
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Apple",
+    "start_url": "https://www.apple.com/",
+    "description": "Compare the prices of the latest models of MacBook Air available on Apple's website.",
+    "reference": [],
+    "id": 2
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "ArXiv",
+    "start_url": "https://arxiv.org/",
+    "description": "Search for the latest preprints about 'quantum computing'.",
+    "reference": [],
+    "id": 3
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "BBC News",
+    "start_url": "https://www.bbc.com/news/",
+    "description": "Find a report on the BBC News website about recent developments in renewable energy technologies in the UK.",
+    "reference": [],
+    "id": 4
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Cambridge Dictionary",
+    "start_url": "https://dictionary.cambridge.org/",
+    "description": "Look up the pronunciation and definition of the word \"sustainability\" on the Cambridge Dictionary.",
+    "reference": [],
+    "id": 5
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "GitHub",
+    "start_url": "https://github.com/",
+    "description": "Search for an open-source project related to 'climate change data visualization' on GitHub and report the project with the most stars.",
+    "reference": [],
+    "id": 6
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Google Flights",
+    "start_url": "https://www.google.com/travel/flights/",
+    "description": "Book a journey with return option on same day from Edinburg to Manchester on December 28th and show me the lowest price option available.",
+    "reference": [],
+    "id": 7
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Google Map",
+    "start_url": "https://www.google.com/maps/",
+    "description": "Find 5 beauty salons with ratings greater than 4.8 in Seattle, WA.",
+    "reference": [],
+    "id": 8
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Google Search",
+    "start_url": "https://www.google.com/",
+    "description": "Find the initial release date for Guardians of the Galaxy Vol. 3 the movie.",
+    "reference": [],
+    "id": 9
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Huggingface",
+    "start_url": "https://huggingface.co/",
+    "description": "Find a pre-trained natural language processing model on Hugging Face that can perform sentiment analysis, and make sure the model's last update is within March 2023.",
+    "reference": [],
+    "id": 10
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Wolfram Alpha",
+    "start_url": "https://www.wolframalpha.com/",
+    "description": "derivative of x^2 when x=5.6",
+    "reference": [],
+    "id": 11
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Allrecipes",
+    "start_url": "https://www.allrecipes.com/",
+    "description": "Find a recipe for a vegetarian lasagna that has at least a four-star rating and uses zucchini.",
+    "reference": [],
+    "id": 12
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Apple",
+    "start_url": "https://www.apple.com/",
+    "description": "Research the new features of the iOS 17 on Apple support and check its compatibility with the iPhone 12.",
+    "reference": [],
+    "id": 13
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "ArXiv",
+    "start_url": "https://arxiv.org/",
+    "description": "Search for the latest research papers on quantum computing submitted to ArXiv within the last two days.",
+    "reference": [],
+    "id": 14
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "BBC News",
+    "start_url": "https://www.bbc.com/news/",
+    "description": "Read the latest health-related news article published on BBC News and summarize the key points discussed.",
+    "reference": [],
+    "id": 15
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Cambridge Dictionary",
+    "start_url": "https://dictionary.cambridge.org/",
+    "description": "Find the pronunciation, definition, and a sample sentence for the word 'serendipity'.",
+    "reference": [],
+    "id": 16
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "GitHub",
+    "start_url": "https://github.com/",
+    "description": "Search for an open-source repository for machine learning in Python, specifically focused on decision trees, updated within the last 2 days.",
+    "reference": [],
+    "id": 17
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Google Flights",
+    "start_url": "https://www.google.com/travel/flights/",
+    "description": "Show me the list of one-way flights today (February 17, 2024) from Chicago to Paris.",
+    "reference": [],
+    "id": 18
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Google Map",
+    "start_url": "https://www.google.com/maps/",
+    "description": "Tell me one bus stop that is nearest to the intersection of main street and Amherst street in Altavista.",
+    "reference": [],
+    "id": 19
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Google Search",
+    "start_url": "https://www.google.com/",
+    "description": "Find Kevin Durant's bio",
+    "reference": [],
+    "id": 20
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Huggingface",
+    "start_url": "https://huggingface.co/",
+    "description": "Use the Huggingface Inference API to generate a short story about a dragon and a wizard.",
+    "reference": [],
+    "id": 21
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Wolfram Alpha",
+    "start_url": "https://www.wolframalpha.com/",
+    "description": "Give a constraint on the set of inequalities for the inner region of the pentagram.",
+    "reference": [],
+    "id": 22
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Allrecipes",
+    "start_url": "https://www.allrecipes.com/",
+    "description": "Find a recipe for a vegetarian lasagna under 600 calories per serving that has a prep time of less than 1 hour.",
+    "reference": [],
+    "id": 23
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "Apple",
+    "start_url": "https://www.apple.com/",
+    "description": "Compare the prices and chips for the iPhone 14 Pro and iPhone 15 Pro models directly from Apple's website.",
+    "reference": [],
+    "id": 24
+  },
+  {
+    "source": "webvoyager",
+    "web_name": "ArXiv",
+    "start_url": "https://arxiv.org/",
+    "description": "Look up the most recent papers related to 'cs.CL', select one and show its abstract.",
+    "reference": [],
+    "id": 25
+  }
+]
