@@ -11,5 +11,4 @@ aiohttp>=3.9.0   # subagents/browser/agent.py — BrowserOS MCP HTTP calls
 # Browser (install when setting up BrowserOS inside E2B)
 # browseros
 
-# Optional: Composio for app integrations
-# composio-core
+composio==1.0.0rc10

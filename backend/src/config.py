@@ -113,6 +113,8 @@ class Settings(BaseSettings):
     langsmith_base_url: str = "https://smith.langchain.com"
     langsmith_tracing: bool = False
 
+    composio_api_key: str = ""
+
     mem0_api_key: str = ""
 
     parallel_api_key: str = ""

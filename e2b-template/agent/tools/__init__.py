@@ -78,6 +78,21 @@ def _list_available_skills() -> str:
     return list_available()
 
 
+def _composio_list_apps() -> str:
+    from agent.tools.composio_tools import composio_list_apps
+    return composio_list_apps()
+
+
+def _composio_find_actions(toolkit: str, query: str = "") -> str:
+    from agent.tools.composio_tools import composio_find_actions
+    return composio_find_actions(toolkit, query)
+
+
+def _composio_execute(action: str, params: dict | None = None) -> str:
+    from agent.tools.composio_tools import composio_execute
+    return composio_execute(action, params)
+
+
 def _init_registry() -> None:
     get_registry().register_many([
         ToolEntry(
@@ -200,6 +215,41 @@ def _init_registry() -> None:
             tags=["skill", "list", "discover", "registry", "available"],
             schema=_schema("list_available_skills", "List skills in public registries", []),
             handler=_list_available_skills,
+        ),
+        ToolEntry(
+            name="composio_list_apps",
+            description="List all apps (Gmail, Slack, Notion, GitHub, etc.) the user has connected. Use this first to see what integrations are available.",
+            tags=["composio", "apps", "connected", "integrations", "gmail", "slack", "notion"],
+            schema=_schema("composio_list_apps", "List connected apps for this user", []),
+            handler=_composio_list_apps,
+        ),
+        ToolEntry(
+            name="composio_find_actions",
+            description="Find available actions for a connected app toolkit (e.g. GMAIL, SLACK, NOTION, GITHUB). Returns a list of action slugs you can execute.",
+            tags=["composio", "actions", "gmail", "slack", "notion", "github", "find", "discover"],
+            schema=_schema(
+                "composio_find_actions",
+                "Find available actions for a Composio toolkit",
+                [
+                    ("toolkit", "string", "Toolkit name e.g. 'GMAIL', 'SLACK', 'NOTION', 'GITHUB'"),
+                    ("query", "string", "Optional keyword filter e.g. 'send', 'list', 'create'"),
+                ],
+            ),
+            handler=_composio_find_actions,
+        ),
+        ToolEntry(
+            name="composio_execute",
+            description="Execute a Composio action using the user's connected app. Use composio_find_actions first to discover valid action slugs and their parameters.",
+            tags=["composio", "execute", "run", "action", "gmail", "slack", "send", "create", "list"],
+            schema=_schema(
+                "composio_execute",
+                "Execute a Composio action for the user's connected app",
+                [
+                    ("action", "string", "Action slug e.g. 'GMAIL_SEND_EMAIL', 'SLACK_SEND_MESSAGE'"),
+                    ("params", "object", "Action parameters (use composio_find_actions to see required params)"),
+                ],
+            ),
+            handler=_composio_execute,
         ),
     ])
 

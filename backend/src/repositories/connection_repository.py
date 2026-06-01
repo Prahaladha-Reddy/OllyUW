@@ -16,3 +16,19 @@ class ConnectionRepository:
             .execute()
         )
         return result.data or []
+
+    def upsert(self, user_id: str, provider: str, composio_account_id: str) -> None:
+        # Delete existing record first (no unique constraint on user_id+provider yet),
+        # then insert fresh. Migration 006 adds the constraint so this becomes a
+        # true upsert going forward.
+        self._db.table("connections").delete().eq("user_id", user_id).eq("provider", provider).execute()
+        self._db.table("connections").insert(
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "composio_account_id": composio_account_id,
+            }
+        ).execute()
+
+    def delete_by_provider(self, user_id: str, provider: str) -> None:
+        self._db.table("connections").delete().eq("user_id", user_id).eq("provider", provider).execute()

@@ -8,6 +8,7 @@ from fastapi.security import OAuth2PasswordBearer
 from supabase import Client
 
 from src.providers import redis_provider, supabase_provider
+from src.providers import composio_provider
 from src.config import get_settings
 from src.providers.e2b_provider import E2BDesktopRuntime
 from src.providers.local_provider import LocalRuntime
@@ -88,7 +89,7 @@ def get_file_service(
 def get_connection_service(
     connection_repo: Annotated[ConnectionRepository, Depends(get_connection_repo)],
 ) -> ConnectionService:
-    return ConnectionService(connection_repo)
+    return ConnectionService(connection_repo, composio_provider.get_client())
 
 
 def get_vault_service(

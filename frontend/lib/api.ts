@@ -80,6 +80,30 @@ export const computerApi = {
   },
 };
 
+// ---- Connections ----
+
+export interface ToolkitStatus {
+  slug: string;
+  name: string;
+  is_connected: boolean;
+}
+
+export const connectionsApi = {
+  listToolkits: (connected_only = false) =>
+    apiFetch<{ toolkits: ToolkitStatus[] }>(
+      `/computer/connections/toolkits?connected_only=${connected_only}`
+    ),
+
+  connect: (toolkit: string, callbackUrl: string) =>
+    apiFetch<{ toolkit: string; redirect_url: string }>(
+      `/computer/connections/${toolkit}/connect?callback_url=${encodeURIComponent(callbackUrl)}`,
+      { method: "POST" }
+    ),
+
+  disconnect: (toolkit: string) =>
+    apiFetch<void>(`/computer/connections/${toolkit}`, { method: "DELETE" }),
+};
+
 // ---- Sessions ----
 
 export const sessionApi = {

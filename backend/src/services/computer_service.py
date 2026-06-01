@@ -254,6 +254,7 @@ echo "=== worker.log (tail 40) ===" && (tail -40 /tmp/worker.log 2>/dev/null || 
                 "LANGFUSE_PUBLIC_KEY": s.langfuse_public_key,
                 "LANGFUSE_SECRET_KEY": s.langfuse_secret_key,
                 "LANGFUSE_BASE_URL": s.langfuse_base_url,
+                "COMPOSIO_API_KEY": s.composio_api_key,
             }
             handle = await _to_thread(
                 self._runtime.start,
