@@ -6,6 +6,8 @@ executable scripts you can run; [references] have extra docs to read._
 - **code-review**: Review code for bugs, security issues, style problems, and performance. Use when asked to review a PR, check code quality, find issues, or audit a codebase.
 - **data-analysis**: Analyse CSV, JSON, or tabular data files. Summarise statistics, find patterns, filter rows, produce charts. Use when asked to analyse, explore, or summarise datasets.  [scripts]
 - **demonstrate-parallel-execution**: When the user asks to see or demonstrate parallel tool execution, fire off multiple independent small tasks simultaneously and present the results.
+- **linkedin-jobs-apply**: Apply for jobs on LinkedIn via Easy Apply, external ATS, or Gmail outreach. Covers Shadow DOM traversal, file upload, connection invites, DMs, and hiring post harvesting. Use for any LinkedIn task.
+- **linkedin-posts-apply**: Hunt for hiring posts on LinkedIn feed (not Jobs tab) and apply via email, Google Forms, external ATS, or DM. Covers lead classification, recruiter profile mining, Gmail compose, and connect-with-note flows.
 - **parallel-subagent-research**: Use parallel subagents to research multiple independent topics simultaneously and aggregate results.
 - **parallel-web-research-with-subagents**: Parallelize web research across multiple subagents (web_search only) to gather information on several topics simultaneously.
 - **pdf-extract**: Extract text, tables, and metadata from PDF files. Use when asked to read, parse, summarise, or search inside PDFs.  [scripts]

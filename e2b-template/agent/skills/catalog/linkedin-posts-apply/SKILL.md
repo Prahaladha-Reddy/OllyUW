@@ -1,3 +1,8 @@
+---
+name: linkedin-posts-apply
+description: Hunt for hiring posts on LinkedIn feed (not Jobs tab) and apply via email, Google Forms, external ATS, or DM. Covers lead classification, recruiter profile mining, Gmail compose, and connect-with-note flows.
+---
+
 # BrowserOS Playbook: Fast LinkedIn Post-Based Job Applications
 
 Audience: automation agents using BrowserOS
@@ -563,4 +568,3 @@ external ATS -> bulk field map + upload_file
 LinkedIn Easy Apply -> only if fit
 DM/connect -> only when no direct application path exists
 ```
-

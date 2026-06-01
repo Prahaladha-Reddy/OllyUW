@@ -7,9 +7,11 @@ def resolve(model: str) -> tuple[str, str, str]:
     """Return (base_url, api_key, model_name) for the given model alias."""
     match model:
         case "mimo" | "browser":
+            # MIMO_API_KEY is canonical; fall back to MIMI_API_KEY (legacy typo in older .env files)
+            api_key = os.environ.get("MIMO_API_KEY") or os.environ.get("MIMI_API_KEY", "")
             return (
                 os.environ.get("MIMO_BASE_URL", "https://api.xiaomimimo.com/v1"),
-                os.environ.get("MIMO_API_KEY", ""),
+                api_key,
                 os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
             )
         case _:

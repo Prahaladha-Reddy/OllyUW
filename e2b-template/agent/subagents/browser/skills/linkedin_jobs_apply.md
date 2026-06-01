@@ -1,7 +1,20 @@
-# BrowserOS Field Notes
+# SKILL: linkedin_jobs_apply
+# Use when: applying to jobs found via LinkedIn Jobs tab, jobs/view/{id} URLs, or Easy Apply flows.
+# Covers: Easy Apply, Gmail outreach, hiring post harvesting, connection invites, DMs, file upload, external ATS.
 
-Date: 2026-06-01
-Workspace: `C:\Users\bored\Documents\olive_assignment\browser_eval`
+---
+
+## ⛔ HARD BANS — THESE SLOW YOU DOWN BY MINUTES, NOT SECONDS
+
+```
+BANNED: take_screenshot twice in a row — you just got the image, use it. Never screenshot again until at least 3 other tool calls have happened.
+BANNED: take_snapshot after every single click — only snapshot when you need element IDs you don't already have.
+BANNED: fill() one field at a time for 3+ fields — use one evaluate_script with native setter to fill all text fields in a single call.
+BANNED: snapshot → fill → snapshot → fill loops — that pattern adds 30+ seconds per form step.
+BANNED: take_screenshot when take_snapshot would answer the question — screenshot is for visual content only (images, charts). Everything else: take_snapshot or evaluate_script.
+```
+
+**Real cost of ignoring these**: a single extra take_screenshot call timed out for 60 seconds in a real run. Sequential fill() calls added 25+ seconds on a 5-field form. These are not style preferences — they are measured time losses.
 
 ---
 
@@ -13,8 +26,9 @@ Workspace: `C:\Users\bored\Documents\olive_assignment\browser_eval`
 
 ## RULE 0 — Speed laws
 
-- **Never screenshot** unless you need to see an image. `take_snapshot` is 10x faster.
-- **Never snapshot → fill → snapshot → fill** for multi-field forms. Use one `evaluate_script` that fills everything + clicks Next.
+- **NEVER take_screenshot twice without at least 3 tool calls in between.** You already have the image — use it. A second consecutive screenshot wastes 60+ seconds if BrowserOS is under load.
+- **NEVER do snapshot → fill → snapshot → fill for multi-field forms.** Use ONE evaluate_script that fills all text fields + triggers React events in a single call. Saves 25–30s per form step.
+- **NEVER take_snapshot after every click** — only snapshot when you need new element IDs. After a form navigation click, snapshot once, then fill everything before snapshotting again.
 - **Build URLs directly** whenever possible. Avoid click chains through navigation.
 - **Parallelize**: fire independent tool calls in the same message (LinkedIn + Gmail simultaneously).
 - **`search_dom("input[type=file]")` → `backendNodeId` → `upload_file(backendNodeId)`** is the only working file upload path. Hidden inputs never appear in `take_snapshot`.
@@ -64,6 +78,15 @@ function setInput(el, val){
 **Do NOT use `select_option` via evaluate_script** — the shadow DOM setter for `<select>` doesn't reliably register with React. Use the `select_option` tool (element ID from snapshot) with the visible text value (no padding spaces).
 
 **Snapshot element IDs automatically pierce shadow DOM** — `take_snapshot` returns element IDs like `[12017]` that the browseros tools (`fill`, `select_option`, `click`) resolve correctly even when the element lives inside a shadow root. You only need the RULE 1 evaluate_script traversal when you're writing raw JS (e.g., bulk-filling 3+ fields with the native setter). For single-field interactions, just use the snapshot ID directly — no shadow DOM traversal needed.
+
+---
+
+## ⛔ REMINDER BEFORE YOU START ANY WORKFLOW
+
+Before executing any step below, commit to this:
+- Each form step = ONE snapshot (to get IDs) + ONE evaluate_script (to fill all fields) + ONE click (Continue). Not more.
+- If you already took a screenshot this turn, DO NOT take another one. Use take_snapshot or evaluate_script instead.
+- If you have 3+ text fields to fill, write one evaluate_script with the native setter for all of them. Do not call fill() repeatedly.
 
 ---
 
@@ -325,3 +348,28 @@ Step 4 — Submit
 | Fields inside LinkedIn modal | Shadow DOM traversal (see RULE 1) | `document.getElementById`, `document.querySelector` |
 
 ---
+
+## ⛔ FINAL ENFORCEMENT — READ THIS BEFORE EVERY TOOL CALL
+
+Ask yourself before each call:
+
+**"Am I about to take_screenshot?"**
+→ Did I already take one this turn? If yes: STOP. Use take_snapshot or evaluate_script instead.
+→ Do I actually need to see a visual image? If no: STOP. Use take_snapshot.
+
+**"Am I about to call fill()?"**
+→ Are there 2+ more text fields on this same form step? If yes: STOP. Write one evaluate_script with native setter for all of them.
+
+**"Am I about to take_snapshot?"**
+→ Did I just click a Continue/Next button and already have a snapshot from before? If yes: STOP. You already know what's on the form — fill it.
+
+**"Am I looping snapshot → action → snapshot → action?"**
+→ If yes: STOP. Batch the actions. One snapshot, all fills, one click.
+
+**Measured costs from a real run:**
+- 1 extra take_screenshot → 60 seconds lost (BrowserOS timeout)
+- 5 sequential fill() calls instead of 1 evaluate_script → 25 seconds lost
+- Snapshot after every click → 30+ seconds lost across a 10-step form
+- Total avoidable waste: ~115 seconds out of a 306-second run
+
+**Target: complete Easy Apply in under 90 seconds, under 20 tool calls.**
