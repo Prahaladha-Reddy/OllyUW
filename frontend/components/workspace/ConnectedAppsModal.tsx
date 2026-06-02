@@ -6,18 +6,28 @@ import { connectionsApi } from "@/lib/api";
 import { connectApp, useConnections } from "@/hooks/useConnections";
 
 const POPULAR_APPS: { slug: string; name: string; color: string; letter: string }[] = [
+  // Google
   { slug: "gmail",        name: "Gmail",        color: "#EA4335", letter: "G" },
-  { slug: "slack",        name: "Slack",        color: "#4A154B", letter: "S" },
-  { slug: "github",       name: "GitHub",       color: "#24292E", letter: "G" },
-  { slug: "notion",       name: "Notion",       color: "#000000", letter: "N" },
   { slug: "googledrive",  name: "Drive",        color: "#0F9D58", letter: "D" },
   { slug: "googlesheets", name: "Sheets",       color: "#34A853", letter: "S" },
+  // Comms
+  { slug: "slack",        name: "Slack",        color: "#4A154B", letter: "S" },
+  { slug: "discord",      name: "Discord",      color: "#5865F2", letter: "D" },
+  { slug: "telegram",     name: "Telegram",     color: "#26A5E4", letter: "T" },
+  { slug: "zoom",         name: "Zoom",         color: "#2D8CFF", letter: "Z" },
+  { slug: "whatsapp",     name: "WhatsApp",     color: "#25D366", letter: "W" },
+  // Social
+  { slug: "linkedin",     name: "LinkedIn",     color: "#0A66C2", letter: "in" },
+  { slug: "instagram",    name: "Instagram",    color: "#E1306C", letter: "ig" },
+  { slug: "reddit",       name: "Reddit",       color: "#FF4500", letter: "R" },
+  { slug: "youtube",      name: "YouTube",      color: "#FF0000", letter: "▶" },
+  // Dev & productivity
+  { slug: "github",       name: "GitHub",       color: "#24292E", letter: "G" },
   { slug: "linear",       name: "Linear",       color: "#5E6AD2", letter: "L" },
   { slug: "jira",         name: "Jira",         color: "#0052CC", letter: "J" },
-  { slug: "telegram",     name: "Telegram",     color: "#26A5E4", letter: "T" },
-  { slug: "discord",      name: "Discord",      color: "#5865F2", letter: "D" },
-  { slug: "hubspot",      name: "HubSpot",      color: "#FF7A59", letter: "H" },
-  { slug: "airtable",     name: "Airtable",     color: "#18BFFF", letter: "A" },
+  { slug: "notion",       name: "Notion",       color: "#000000", letter: "N" },
+  { slug: "calendly",     name: "Calendly",     color: "#006BFF", letter: "C" },
+  { slug: "dropbox",      name: "Dropbox",      color: "#0061FF", letter: "D" },
 ];
 
 interface Props {
