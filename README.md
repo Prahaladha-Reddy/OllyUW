@@ -35,7 +35,7 @@ Every AI assistant today is stateless. Each session starts from zero: no memory 
 
 ### Persistence Model
 
-Most agent frameworks are stateless by design — each session starts from a blank context window. Kairos maintains state across sessions through a two-layer memory system.
+Most agent frameworks are stateless by design — each session starts from a blank context window. Olly maintains state across sessions through a two-layer memory system.
 
 **Layer 1 — Exact history.** Every session writes a verbatim conversation log to `{sessionid}/agent_conv.json`. This is grep-able, diffable, and used to reconstruct precise context when needed.
 
@@ -246,8 +246,8 @@ This pattern generalizes to any workflow requiring parallel form submission or m
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/your-org/kairos.git
-cd kairos
+git clone https://github.com/your-org/olly.git
+cd olly
 pip install -r requirements.txt
 ```
 
