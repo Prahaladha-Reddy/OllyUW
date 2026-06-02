@@ -1,255 +1,314 @@
-# Olly
+# Olly — A Persistent AI Computer
 
-Olly is a persistent web-based "second computer" for an AI agent. Each user gets
-one durable cloud computer with files, saved app sessions, background goals, and
-a visible control surface for the work the agent is doing.
+Olly is a computing environment — real browser, real shell, real desktop, connected apps — where the AI agent carries its state across sessions. It knows your workflows, your preferences, your auth tokens, and your history from previous sessions. You do not re-explain yourself.
 
-## What This Builds
+## Why This Exists
 
-- A React workspace that is shifting from project/chat primitives to a single
-  per-user computer shell.
-- A FastAPI backend for auth-aware computer, file, vault, connection, and goal APIs.
-- An E2B sandbox runtime that will become the persistent execution surface behind
-  each user's computer.
-- Modal deployment scripts for serving Gemma 4 through an OpenAI-compatible vLLM
-  endpoint, with standard and TurboQuant variants.
-- Evaluation runners and older underwriting artifacts from the prior product
-  direction, still present in the repo while the pivot is completed.
-- Langfuse observability for tracing LLM calls from the sandboxed agent runtime.
+Every AI assistant today is stateless. Each session starts from zero: no memory of last week, no saved browser state, no learned workflows, no retained credentials. A capable system that forgets everything is not an assistant — it is a fast search engine you re-train every time you open it.
 
-## Repository Layout
+Kairos fixes that directly. Persistent conversation history. Compressed session recall. Durable user preferences and agent identity that survive restarts. OAuth tokens stored in Vault, not re-authorized every session. Browser state snapshotted and restored. Skills that accumulate as the agent learns your repeated workflows and writes reusable files for them. The delta between session one and session fifty is visible.
+---
 
-```text
-backend/              FastAPI API, services, providers, migrations, tests
-frontend/             Vite + React application
-e2b-template/         E2B sandbox image and agent runtime code
-infrastructure/modal/ Modal vLLM deployment and benchmark scripts
-evals/                Evaluation datasets, harnesses, judges, and reports
-tools/                Local utility scripts
-```
+## Table of Contents
+
+- [Why This Exists](#why-this-exists)
+- [Architecture](#architecture)
+  - [Persistence Model](#persistence-model)
+  - [Memory Files](#memory-files)
+  - [Self-Evolving Skills](#self-evolving-skills)
+  - [Subagent Orchestration](#subagent-orchestration)
+  - [Tool Access Per Agent Type](#tool-access-per-agent-type)
+- [Capabilities](#capabilities)
+  - [Real Browser Automation](#real-browser-automation)
+  - [Shell and File System](#shell-and-file-system)
+  - [Desktop Sandbox with Snapshot/Restore](#desktop-sandbox-with-snapshotrestore)
+  - [Connected Apps via OAuth](#connected-apps-via-oauth)
+  - [Semantic Tool Search](#semantic-tool-search)
+  - [Cross-Session Memory and Identity](#cross-session-memory-and-identity)
+- [Demo: 300 LinkedIn Job Applications in 20 Minutes for $0.50](#demo-300-linkedin-job-applications-in-20-minutes-for-050)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Observability](#observability)
+- [Contributing / Status](#contributing--status)
+
+---
 
 ## Architecture
 
-The local web app has three main runtime pieces:
+### Persistence Model
 
-1. The frontend authenticates users with Supabase and calls the backend API.
-2. The backend stores computer/file/vault metadata in Supabase, stores uploaded
-   artifacts in Supabase Storage, and coordinates persistent machine state.
-3. The E2B worker is the execution environment the computer wakes when the agent
-   needs to act, with Redis used for coordination and streaming.
+Most agent frameworks are stateless by design — each session starts from a blank context window. Kairos maintains state across sessions through a two-layer memory system.
 
-Model providers are configured behind OpenAI-compatible surfaces:
+**Layer 1 — Exact history.** Every session writes a verbatim conversation log to `{sessionid}/agent_conv.json`. This is grep-able, diffable, and used to reconstruct precise context when needed.
 
-- `modal-standard`: Gemma 4 served by Modal/vLLM.
-- `modal-turbo`: Gemma 4 served by Modal/vLLM with TurboQuant KV cache settings.
-- `deepseek`: frontier-model comparison path.
+**Layer 2 — Compressed recall.** Long sessions produce `{sessionid}/summary.md`, a condensed representation of what happened, what was decided, and what state the environment is in. On session start, the agent loads the summary rather than replaying the full log, keeping the context window lean while preserving continuity.
 
-## Prerequisites
+Two durable files sit above the session layer and persist indefinitely:
 
-- Python 3.12+
-- `uv`
-- Node.js and npm
-- Supabase project credentials
-- Redis URL
-- E2B API key
-- At least one model provider configured, usually DeepSeek for local testing or
-  Modal URLs after deployment
+| File | Purpose |
+|------|---------|
+| `Memory.md` | User preferences, behavioral patterns, accumulated facts about the user's workflow |
+| `Soul.md` | Agent identity, personality, and operating principles — stable across all sessions |
 
-## Environment
+Together, these four artifacts mean the agent resumes where it left off rather than asking you to re-explain yourself.
 
-Create a root `.env` file. The backend loads the root `.env` and
-`backend/.env`; root-level configuration is the simplest path for this repo.
+---
 
-Common backend variables:
+### Memory Files
+
+```
+workspace/
+├── {sessionid}/
+│   ├── agent_conv.json   # Verbatim message history — exact, searchable
+│   └── summary.md        # Compressed recall for long sessions
+├── Memory.md             # Durable: user prefs + behavioral patterns
+└── Soul.md               # Durable: agent identity + personality
+```
+
+- **`agent_conv.json`** — Full fidelity record. Used for auditing, debugging, and reconstructing context when the summary alone is insufficient.
+- **`summary.md`** — Written at compaction boundaries. Captures decisions made, tasks completed, current environment state. Loaded preferentially on resume.
+- **`Memory.md`** — Updated continuously as the agent learns about the user. Drives personalization without requiring re-explanation.
+- **`Soul.md`** — Read-only by default during normal operation. Defines how the agent reasons, prioritizes, and handles ambiguity.
+
+---
+
+### Self-Evolving Skills
+
+When a workflow is repeated across sessions, the agent extracts it into a reusable skill file stored in the workspace. Skills are loaded on demand via semantic search against a skill index — only matching skills are pulled into context, avoiding bloat from a growing library.
+
+The agent's capability surface expands over time within its own workspace. A workflow automated once becomes a reusable tool for future sessions.
+
+---
+
+### Subagent Orchestration
+
+Long-horizon tasks are broken into parallel workstreams. Each subagent runs in isolation with its own tool access:
+
+```
+User Prompt
+     │
+     ▼
+┌─────────────────────────────────────────┐
+│            Orchestrator Agent            │
+│         (task decomposition)            │
+└──┬──────┬──────┬──────┬────────────────┘
+   │      │      │      │
+   ▼      ▼      ▼      ▼
+Browser  Shell   Web   File/App
+Agent   Agent  Agent   Agent
+(BrowserOS) (E2B) (search) (OAuth tools)
+   │      │      │      │
+   └──────┴──────┴──────┘
+              │
+        Redis Pub/Sub
+         (inter-agent messaging)
+              │
+        FastAPI SSE
+         (streaming output to client)
+```
+
+**Inter-agent messaging** uses Redis Pub/Sub. Agents publish results and status to named channels; the orchestrator subscribes and coordinates.
+
+**Client streaming** uses FastAPI Server-Sent Events. Output streams to the frontend as agents complete work, rather than waiting for full task completion.
+
+**Desktop state** is preserved via E2B sandbox snapshots. A browser session mid-task can be suspended and resumed without losing open tabs, scroll position, or filled forms.
+
+---
+
+### Tool Access Per Agent Type
+
+| Agent | Primary Tools |
+|-------|--------------|
+| Browser | BrowserOS MCP — 40+ app integrations, click/fill/navigate, DOM access |
+| Shell | E2B sandbox — full Linux shell, file system, process execution |
+| Web | Web search + fetch — open-web retrieval |
+| App | OAuth-connected integrations — Gmail, LinkedIn, GitHub, Slack, Notion, Drive, Sheets |
+
+OAuth tokens are stored in Supabase Vault. The agent never handles raw credentials directly — authorization flows go through a first-party custody layer before tokens are vaulted.
+
+---
+
+## Capabilities
+
+### Real Browser Automation
+
+The agent drives a full Chromium browser via BrowserOS MCP — clicking, scrolling, filling forms, handling auth dialogs, navigating SPAs. The browser holds real sessions, cookies, and localStorage across runs. BrowserOS exposes 40+ app-specific action sets (LinkedIn, Gmail, Google Sheets, etc.) alongside low-level primitives like `click_at`, `fill`, `evaluate_script`, and `take_screenshot`.
+
+### Shell and File System
+
+The agent has persistent shell access inside an E2B sandbox. It can write and execute scripts, install packages, manipulate files, run long-running processes, and pipe output back into the conversation. The file system survives across sessions unless explicitly reset.
+
+### Desktop Sandbox with Snapshot/Restore
+
+E2B desktop snapshots capture the full state of the sandbox — open apps, file system, browser state, running processes. When a session resumes, the snapshot is restored and the agent continues where it left off.
+
+### Connected Apps via OAuth
+
+The agent has authenticated access to:
+
+| App | What it can do |
+|---|---|
+| Gmail | Read, compose, send, label, search |
+| LinkedIn | Browse jobs, fill Easy Apply forms, message connections |
+| Google Sheets | Read and write cells, create sheets |
+| Google Drive | Upload, download, organize files |
+| GitHub | Read repos, open issues, comment on PRs |
+| Slack | Send messages, read channels |
+| Notion | Read and write pages and databases |
+
+OAuth tokens are stored in Supabase Vault. Users authorize once through a first-party flow. The agent never sees raw credentials.
+
+### Semantic Tool Search
+
+The agent has access to a large tool registry but only loads what it needs. Tool schemas are deferred — the agent issues a semantic search query at runtime and fetches the matching tool definition on demand. This keeps the active context window lean even when the full tool surface is large.
+
+### Cross-Session Memory and Identity
+
+Four layers of persistence survive across sessions:
+
+- `sessionid/agent_conv.json` — full conversation history, grep-able
+- `sessionid/summary.md` — compressed recall for sessions that exceed context limits
+- `Memory.md` — user preferences, working patterns, and behavioral context the agent has accumulated
+- `Soul.md` — agent identity and operating principles, stable across all sessions
+
+When a new session starts, the agent loads its soul, reads recent memory, and resumes with full context about who it is and who it is working with.
+
+---
+
+## Demo: 300 LinkedIn Job Applications in 20 Minutes for $0.50
+
+### What it does
+
+A single user prompt triggers 6 parallel browser subagents. Each subagent opens a LinkedIn session, searches for Easy Apply jobs matching the user's criteria, fills each application form, and submits. The agent skips jobs requiring external redirects, handles multi-step forms (cover letter, screening questions, resume upload), and tracks submission status.
+
+Result: ~300 applications submitted in approximately 20 minutes at a total cost of roughly ₹40 / $0.50 in API and compute.
+
+### What is happening under the hood
+
+```
+User prompt
+    │
+    ▼
+Orchestrator agent
+    ├── spawns 6 browser subagents (parallel)
+    │       each subagent:
+    │       ├── authenticates to LinkedIn via stored OAuth token
+    │       ├── queries job listings (role, location, Easy Apply filter)
+    │       ├── iterates listings → fill form fields → submit
+    │       └── publishes completion events to Redis Pub/Sub
+    │
+    ├── FastAPI SSE stream → real-time progress to client
+    └── Langfuse traces every subagent action for replay/debugging
+```
+
+Each subagent operates in an isolated BrowserOS page. Redis Pub/Sub coordinates deduplication — two agents will not apply to the same job posting. The orchestrator collects results and writes a summary back to the user's session memory.
+
+### Running the demo
+
+1. Authorize LinkedIn through the OAuth flow (one-time).
+2. Start the FastAPI server and the Redis broker.
+3. Send a prompt to the agent endpoint, e.g.:
+
+```
+Apply to software engineering roles in Bangalore with Easy Apply.
+Prefer Series A–C startups. Skip anything requiring a cover letter longer than 250 words.
+```
+
+4. Watch the SSE stream for live application status. Final results land in the session summary.
+
+This pattern generalizes to any workflow requiring parallel form submission or multi-site data entry — LinkedIn is one instance, not a special case.
+
+---
+
+## Tech Stack
+
+| Component | Role |
+|---|---|
+| **Deepseek-v4-flash** | Core LLM powering the orchestrator and all subagents |
+| **BrowserOS MCP** | Browser automation server exposing 40+ app integrations as MCP tools; drives real Chromium sessions |
+| **E2B** | Cloud sandbox providing the persistent shell, filesystem, and desktop environment; snapshots preserve state across sessions |
+| **Redis** | Pub/Sub backbone for inter-agent messaging; decouples parallel subagents from the orchestrator |
+| **FastAPI** | HTTP API layer with Server-Sent Events (SSE) for streaming agent output to clients |
+| **Supabase Vault** | Encrypted storage for OAuth tokens and secrets; tokens never touch application memory at rest |
+| **Langfuse** | LLM observability — traces every agent call, tool invocation, and token cost |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11+
+- Redis (local or hosted — [Upstash](https://upstash.com) works)
+- An [E2B](https://e2b.dev) account with a desktop-capable sandbox template
+- A [BrowserOS](https://browseros.com) MCP server running locally or remotely
+- [Langfuse](https://langfuse.com) project (cloud or self-hosted)
+- Supabase project with Vault enabled
+
+### 1. Clone and install
+
+```bash
+git clone https://github.com/your-org/kairos.git
+cd kairos
+pip install -r requirements.txt
+```
+
+### 2. Environment variables
+
+Create a `.env` file at the project root:
 
 ```env
-# Modal / open-source model serving
-MODAL_STANDARD_BASE_URL=
-MODAL_TURBO_BASE_URL=
-MODAL_API_KEY=unused
-MODAL_MODEL=
+# E2B
+E2B_API_KEY=e2b_...
+E2B_TEMPLATE_ID=<your-desktop-template-id>
 
-# DeepSeek / frontier model path
-DEEPSEEK_API_KEY=<deepseek-api-key>
-DEEPSEEK_BASE_URL=https://api.deepseek.com
-DEEPSEEK_MODEL=deepseek-v4-flash
+# BrowserOS MCP
+BROWSEROS_MCP_URL=http://localhost:8931
 
-# Agent transport
-REDIS_URL=<upstash-or-redis-url>
+# Redis
+REDIS_URL=redis://localhost:6379
 
-# E2B sandbox runtime
-E2B_API_KEY=
-E2B_TEMPLATE_ID=
-E2B_SANDBOX_TIMEOUT=
+# Supabase
+SUPABASE_URL=https://<project>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# Supabase auth, database, and storage
-SUPABASE_URL=
-SUPABASE_PUBLISHABLE_KEY=
-SUPABASE_SECRET_KEY=
-SUPABASE_BUCKET=
+# Langfuse
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_HOST=https://cloud.langfuse.com
 
-# Unstructured document parsing
-UNSTRUCTURED_API_KEY=<unstructured-api-key>
-
-# Agent memory and external research
-MEM0_API_KEY=<mem0-api-key>
-PARALLEL_API_KEY=<parallel-api-key>
-
-# Langfuse LLM observability
-LANGFUSE_PUBLIC_KEY=<langfuse-public-key>
-LANGFUSE_SECRET_KEY=<langfuse-secret-key>
-LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
-
-# LangSmith tracing, kept in parallel with Langfuse
-LANGSMITH_API_KEY=<langsmith-api-key>
-LANGSMITH_BASE_URL=https://smith.langchain.com
-LANGSMITH_TRACING=true
-
-BACKEND_URL=http://localhost:8000
-FRONTEND_URL=http://localhost:5173
+# Session config
+SESSION_ID=<uuid>
+MEMORY_DIR=./memory
 ```
 
-Do not commit real API keys, Redis credentials, Supabase secret keys, or Langfuse
-secret keys. The checked-in README intentionally uses placeholders for secrets.
+### 3. Start Redis
 
-Frontend variables belong in `frontend/.env`:
-
-```env
-VITE_API_BASE_URL=http://127.0.0.1:8000
-VITE_SUPABASE_URL=
-VITE_SUPABASE_PUBLISHABLE_KEY=
+```bash
+redis-server
+# or point REDIS_URL at an existing Upstash instance
 ```
 
-Langfuse is the primary LLM observability path for the sandboxed agent. When
-`LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are set, the backend forwards
-them into each E2B worker session, and the agent records LLM traces through the
-Langfuse LangChain callback and OpenAI wrapper. LangSmith tracing is still
-available in parallel through the `LANGSMITH_*` variables.
+### 4. Start BrowserOS MCP
 
-## Backend
+Follow the [BrowserOS setup guide](https://browseros.com/docs) to launch the MCP server, then confirm it is reachable at the URL in `BROWSEROS_MCP_URL`.
 
-Install dependencies:
+### 5. Run the agent
 
-```powershell
-uv sync --project backend --extra dev
+```bash
+uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Run the API:
+The FastAPI server exposes an SSE endpoint at `/stream` — connect a client there to receive streamed agent output in real time.
 
-```powershell
-uv run --project backend python backend/main.py
-```
+### 6. Resume a session
 
-The API defaults to `http://localhost:8000`.
+The agent automatically loads `memory/{SESSION_ID}/agent_conv.json` and `memory/{SESSION_ID}/summary.md` on startup. Set `SESSION_ID` to an existing session UUID to resume where it left off. A new UUID starts a fresh session while still inheriting `Memory.md` and `Soul.md`.
 
-Run backend tests:
+---
 
-```powershell
-uv run --project backend pytest backend/tests
-```
+## Observability
 
-Smoke-test a provider:
+**Langfuse tracing** — every LLM call, tool invocation, subagent spawn, and token count is recorded as a trace. Open the dashboard to inspect latency, cost per session, and individual tool call chains.
 
-```powershell
-uv run --project backend python backend/tests/test_inference.py --provider deepseek
-uv run --project backend python backend/tests/test_inference.py --provider modal-standard
-uv run --project backend python backend/tests/test_inference.py --provider modal-turbo
-```
-
-## Frontend
-
-Install dependencies:
-
-```powershell
-cd frontend
-npm install
-```
-
-Run the Vite app:
-
-```powershell
-npm run dev
-```
-
-The frontend defaults to `http://127.0.0.1:5173`.
-
-Build the frontend:
-
-```powershell
-npm run build
-```
-
-## E2B Agent Template
-
-The E2B template preinstalls the agent runtime dependencies so sessions can
-start quickly.
-
-Build the template:
-
-```powershell
-uv run .\e2b-template\template.py
-```
-
-After a successful build, copy the printed template ID into:
-
-```env
-E2B_TEMPLATE_ID=
-```
-
-## Modal Model Serving
-
-The Modal scripts serve Gemma 4 through vLLM with an OpenAI-compatible API.
-
-Deploy standard Gemma:
-
-```powershell
-modal deploy infrastructure/modal/deploy_gemma_standard.py
-```
-
-Deploy the TurboQuant variant:
-
-```powershell
-modal deploy infrastructure/modal/deploy_gemma_turboquant.py
-```
-
-After deployment, set the resulting URLs in `.env`:
-
-```env
-MODAL_STANDARD_BASE_URL=
-MODAL_TURBO_BASE_URL=
-```
-
-The inference smoke test appends `/v1` if it is not already present.
-
-## Evaluations
-
-The eval framework compares the assignment model paths on hallucination, bias,
-and content safety. Reports are written to `evals/reports/`.
-
-Build or refresh seed datasets:
-
-```powershell
-$env:PYTHONPATH = (Get-Location).Path
-uv run --project backend python -m evals.datasets.build_seed_data
-```
-
-Run a no-API smoke test:
-
-```powershell
-$env:PYTHONPATH = (Get-Location).Path
-uv run --project backend python -m evals.runners.all --harness direct --models mock
-```
-
-Run direct model evals:
-
-```powershell
-$env:PYTHONPATH = (Get-Location).Path
-uv run --project backend python -m evals.runners.all --harness direct --models modal,deepseek --concurrency 10
-```
-
-Run the reportable E2B agent eval:
-
-```powershell
-$env:PYTHONPATH = (Get-Location).Path
-uv run --project backend python -m evals.runners.all --harness e2b-agent --models modal,deepseek --concurrency 10
-```
+**E2B snapshot recovery** — the desktop sandbox state is periodically snapshotted via the E2B API. If the orchestrator crashes mid-task, restarting with the same `SESSION_ID` and snapshot ID restores the browser tabs, open files, and shell working directory to the last checkpoint.
