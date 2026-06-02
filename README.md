@@ -4,9 +4,7 @@ Olly is a computing environment — real browser, real shell, real desktop, conn
 
 ## Why This Exists
 
-Every AI assistant today is stateless. Each session starts from zero: no memory of last week, no saved browser state, no learned workflows, no retained credentials. A capable system that forgets everything is not an assistant — it is a fast search engine you re-train every time you open it.
-
-Kairos fixes that directly. Persistent conversation history. Compressed session recall. Durable user preferences and agent identity that survive restarts. OAuth tokens stored in Vault, not re-authorized every session. Browser state snapshotted and restored. Skills that accumulate as the agent learns your repeated workflows and writes reusable files for them. The delta between session one and session fifty is visible.
+Every AI assistant today is stateless. Each session starts from zero: no memory of last week, no saved browser state, no learned workflows, no retained credentials. A capable system that forgets everything is not an assistant — it is a fast search engine you re-train every time you open it. Olly Persistent conversation history. Compressed session recall. Durable user preferences and agent identity that survive restarts. OAuth tokens stored in Vault, not re-authorized every session. Browser state snapshotted and restored. Skills that accumulate as the agent learns your repeated workflows and writes reusable files for them. The delta between session one and session fifty is visible.
 ---
 
 ## Table of Contents
