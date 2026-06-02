@@ -164,7 +164,7 @@ async def _run_one(task: dict[str, Any]) -> dict[str, Any]:
     goal      = str(task.get("goal", ""))
     context   = str(task.get("context") or "")
     toolsets  = list(task.get("toolsets") or ["file", "shell", "web"])
-    max_turns = int(task.get("max_turns") or 30)
+    max_turns = max(int(task.get("max_turns") or 60), 30)
     sa_id     = str(task.get("_sa_id", f"sa-{id(task)}"))
     sa_label  = f"{sa_id} [{','.join(toolsets)}]"
 

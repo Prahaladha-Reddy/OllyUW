@@ -246,9 +246,20 @@ echo "=== worker.log (tail 40) ===" && (tail -40 /tmp/worker.log 2>/dev/null || 
                 "OLLYUW_USER_ID": user_id,
                 "REDIS_URL": s.redis_url,
                 "WORKSPACE": s.e2b_workspace_path,
+                # LLM providers
                 "DEEPSEEK_API_KEY": s.deepseek_api_key,
                 "DEEPSEEK_BASE_URL": s.deepseek_base_url,
                 "DEEPSEEK_MODEL": s.deepseek_model,
+                "MODAL_STANDARD_BASE_URL": s.modal_standard_base_url,
+                "MODAL_TURBO_BASE_URL": s.modal_turbo_base_url,
+                # MiMo vision model (browser subagent)
+                "MIMO_API_KEY": s.mimo_api_key,
+                "MIMI_API_KEY": s.mimo_api_key,  # legacy alias
+                "MIMO_BASE_URL": s.mimo_base_url,
+                "MIMO_MODEL": s.mimo_model,
+                # Browser MCP (injected by e2b_provider after BrowserOS starts)
+                # "BROWSEROS_MCP_URL" is set by _install_and_start_browseros
+                # Memory / observability
                 "MEM0_API_KEY": s.mem0_api_key,
                 "PARALLEL_API_KEY": s.parallel_api_key,
                 "LANGFUSE_PUBLIC_KEY": s.langfuse_public_key,

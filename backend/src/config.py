@@ -115,6 +115,11 @@ class Settings(BaseSettings):
 
     composio_api_key: str = ""
 
+    # MiMo vision model — used by the browser subagent (agent/subagents/browser/agent.py)
+    mimo_api_key: str = ""
+    mimo_base_url: str = "https://api.xiaomimimo.com/v1"
+    mimo_model: str = "mimo-v2.5"
+
     mem0_api_key: str = ""
 
     parallel_api_key: str = ""

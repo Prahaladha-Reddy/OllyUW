@@ -366,7 +366,97 @@ class E2BDesktopRuntime:
         if not self._install_agent_deps(desktop):
             return
 
+        # Install and autostart BrowserOS so the browser subagent has its MCP server.
+        browseros_ready = self._install_and_start_browseros(desktop)
+        env = {**env, "BROWSEROS_MCP_URL": "http://localhost:9000/mcp"}
+        if not browseros_ready:
+            logger.warning("BrowserOS MCP not ready — browser subagent will be unavailable")
+
         self._launch_worker(desktop, env)
+
+    def _install_and_start_browseros(self, desktop: DesktopSandbox) -> bool:
+        """Install BrowserOS (Debian package) and start its MCP server on port 9000.
+
+        BrowserOS is the real browser automation engine the agent uses — same tool
+        names, same API surface as what's tested locally. Runs on the XFCE display (:0)
+        that every E2B desktop sandbox boots with.
+
+        Returns True if port 9000 is listening after startup, False otherwise.
+        The caller continues regardless so a BrowserOS failure never blocks the
+        main agent worker.
+        """
+        # Skip if already running (idempotent on reconnect)
+        port_check = desktop.commands.run(
+            "ss -tlnp 2>/dev/null | grep -q ':9000' && echo RUNNING || echo ABSENT",
+            timeout=5,
+        )
+        if "RUNNING" in (port_check.stdout or ""):
+            logger.info("BrowserOS MCP already listening on port 9000")
+            return True
+
+        # Install BrowserOS .deb if not already installed
+        installed_check = desktop.commands.run(
+            "command -v browseros 2>/dev/null && echo YES || echo NO",
+            timeout=5,
+        )
+        if "NO" in (installed_check.stdout or ""):
+            logger.info("installing BrowserOS on sandbox %s", desktop.sandbox_id)
+            try:
+                desktop.commands.run(
+                    "wget -q https://cdn.browseros.com/download/BrowserOS.deb -O /tmp/BrowserOS.deb",
+                    timeout=120,
+                )
+                desktop.commands.run(
+                    "sudo DEBIAN_FRONTEND=noninteractive dpkg -i /tmp/BrowserOS.deb 2>/dev/null || true && "
+                    "sudo DEBIAN_FRONTEND=noninteractive apt-get install -f -y -qq 2>/dev/null || true",
+                    timeout=120,
+                )
+            except Exception as exc:
+                logger.warning("BrowserOS install failed: %s", exc)
+                return False
+
+        # Launch BrowserOS on the XFCE display with MCP server enabled
+        try:
+            desktop.commands.run(
+                "pkill -f '[b]rowseros' 2>/dev/null || true",
+                timeout=5,
+            )
+            # BrowserOS exposes its MCP server at port 9000 when running.
+            # Use DISPLAY=:0 so it attaches to the existing XFCE X server.
+            desktop.commands.run(
+                "export DISPLAY=:0 XAUTHORITY=/home/user/.Xauthority; "
+                "nohup browseros --no-first-run --disable-gpu-sandbox "
+                ">/tmp/browseros.log 2>&1 &",
+                background=True,
+            )
+        except Exception as exc:
+            logger.warning("BrowserOS launch failed: %s", exc)
+            return False
+
+        # Wait up to 30 s for the MCP server port to open
+        for attempt in range(15):
+            time.sleep(2)
+            try:
+                result = desktop.commands.run(
+                    "ss -tlnp 2>/dev/null | grep -q ':9000' && echo READY || echo WAIT",
+                    timeout=5,
+                )
+                if "READY" in (result.stdout or ""):
+                    logger.info("BrowserOS MCP server ready on port 9000 (attempt %d)", attempt + 1)
+                    return True
+            except Exception:
+                pass
+
+        # Log the BrowserOS startup output to help diagnose failures
+        try:
+            tail = desktop.commands.run("tail -20 /tmp/browseros.log 2>/dev/null || true", timeout=5)
+            logger.warning(
+                "BrowserOS did not open port 9000 after 30s. Log tail:\n%s",
+                (tail.stdout or "") + (tail.stderr or ""),
+            )
+        except Exception:
+            pass
+        return False
 
     def _install_agent_deps(self, desktop: DesktopSandbox) -> bool:
         # The desktop template ships system Python 3.10 with pip 22, which the
@@ -384,7 +474,7 @@ class E2BDesktopRuntime:
         install_cmd = (
             "pip3 install --user --quiet --no-warn-script-location "
             "'redis==7.4.0' python-dotenv langchain-openai langchain-core openai "
-            "tiktoken mem0ai parallel-web langfuse"
+            "tiktoken mem0ai parallel-web langfuse aiohttp pyyaml 'composio==1.0.0rc10'"
         )
         try:
             # No exit-code masking here: commands.run raises on a non-zero exit
@@ -453,13 +543,21 @@ class E2BDesktopRuntime:
     def _upload_agent_files(self, desktop: DesktopSandbox) -> None:
         try:
             desktop.commands.run("mkdir -p /home/user/agent", timeout=5)
-            for path in AGENT_DIR.rglob("*.py"):
+            # Upload all source files: Python code, skills (md), subagent definitions (yaml),
+            # and any json config files. __pycache__ dirs are skipped automatically.
+            UPLOAD_SUFFIXES = {".py", ".md", ".yaml", ".yml", ".json"}
+            uploaded = 0
+            for path in AGENT_DIR.rglob("*"):
+                if path.is_dir() or path.suffix not in UPLOAD_SUFFIXES:
+                    continue
+                if "__pycache__" in path.parts:
+                    continue
                 relative = path.relative_to(AGENT_DIR)
                 remote_path = f"/home/user/agent/{relative.as_posix()}"
-                # Ensure parent directory exists.
                 parent = remote_path.rsplit("/", 1)[0]
                 desktop.commands.run(f"mkdir -p {parent}", timeout=5)
                 desktop.files.write(remote_path, path.read_text(encoding="utf-8"))
-            logger.info("agent files uploaded to sandbox %s", desktop.sandbox_id)
+                uploaded += 1
+            logger.info("agent files uploaded to sandbox %s (%d files)", desktop.sandbox_id, uploaded)
         except Exception as exc:
             logger.warning("failed to upload agent files: %s", exc)
